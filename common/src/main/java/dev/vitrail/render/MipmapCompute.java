@@ -58,10 +58,10 @@ import java.util.Objects;
  * <p>
  * The values are the blit's: the hardware linear filter at the centre of each texel written,
  * scaled onto the level above, which on a level that halves exactly is the average of the four
- * texels under it. The tail reads the level above through image loads and filters by hand, with
- * the same weights. What differs is rounding: a level built from the one above in the same tile is
- * averaged from that level's values before they are stored, rather than after, so a texel can land
- * one step of its format away from the blit's.
+ * texels under it. A level built from one the same dispatch built is filtered by hand from shared
+ * memory, with the same weights. What differs is rounding: such a level is filtered from the values
+ * of the one above before they are stored, rather than after, so a texel can land one step of its
+ * format away from the blit's.
  * <p>
  * Only for a colour format the device stores into, filters linearly and that has a GLSL storage
  * qualifier; anything else keeps the blits, as does a chain recorded with a pass open. The surface
@@ -80,14 +80,18 @@ final class MipmapCompute {
 	/** Levels one tile builds at most: a 64 by 64 tile of the level above reduces to one texel. */
 	static final int TILE_LEVELS = 6;
 
-	/** The tail starts at the first level of this many texels or fewer, built by one workgroup. */
-	static final int TAIL_TEXELS = 2048;
+	/**
+	 * The tail starts at the first level of this many texels or fewer, built by one workgroup in
+	 * shared memory: 16 KiB of {@code vec4}, the most every device gives a workgroup. Four per
+	 * invocation, so the level after it is two per invocation at most.
+	 */
+	static final int TAIL_TEXELS = 1024;
 
 	/** Levels one tail dispatch writes at most; a longer tail takes another dispatch. */
 	static final int TAIL_LEVELS = 7;
 
-	/** The level read and the levels written: one storage binding each. */
-	private static final int STORAGE_BINDINGS = TAIL_LEVELS + 1;
+	/** One storage binding per level written. */
+	private static final int STORAGE_BINDINGS = TAIL_LEVELS;
 
 	private static final int PUSH_CONSTANT_BYTES = 16;
 
@@ -101,40 +105,28 @@ final class MipmapCompute {
 
 			// The level above the first one written, alone, through a clamped linear sampler.
 			layout(binding = 0) uniform sampler2D source;
-			// The same level, then each level this dispatch writes, in order.
-			layout(binding = 1, FORMAT) uniform coherent readonly image2D level0;
-			layout(binding = 2, FORMAT) uniform coherent image2D level1;
-			layout(binding = 3, FORMAT) uniform coherent image2D level2;
-			layout(binding = 4, FORMAT) uniform coherent image2D level3;
-			layout(binding = 5, FORMAT) uniform coherent image2D level4;
-			layout(binding = 6, FORMAT) uniform coherent image2D level5;
-			layout(binding = 7, FORMAT) uniform coherent image2D level6;
-			layout(binding = 8, FORMAT) uniform coherent writeonly image2D level7;
+			// Each level this dispatch writes, in order. Only ever stored to: a level that another
+			// in the same dispatch is built from is read back from shared memory.
+			layout(binding = 1, FORMAT) uniform writeonly image2D level1;
+			layout(binding = 2, FORMAT) uniform writeonly image2D level2;
+			layout(binding = 3, FORMAT) uniform writeonly image2D level3;
+			layout(binding = 4, FORMAT) uniform writeonly image2D level4;
+			layout(binding = 5, FORMAT) uniform writeonly image2D level5;
+			layout(binding = 6, FORMAT) uniform writeonly image2D level6;
+			layout(binding = 7, FORMAT) uniform writeonly image2D level7;
 
 			layout(push_constant) uniform Chain {
-				ivec2 size;  // of level0
+				ivec2 size;  // of the level source holds, level 0 here
 				int mode;    // 0 tile, 1 single, 2 tail
 				int count;   // levels written
 			} chain;
 
-			shared vec4 cells[256];
+			// A tile's 16 by 16 texels of level 2, or a whole tail level.
+			shared vec4 cells[TAIL_TEXELS];
 
 			// The extent of a level, which floors at one texel the way the image's own levels do.
 			ivec2 sizeOf(int level) {
 				return max(chain.size >> level, ivec2(1));
-			}
-
-			vec4 load(int level, ivec2 texel) {
-				switch (level) {
-				case 0: return imageLoad(level0, texel);
-				case 1: return imageLoad(level1, texel);
-				case 2: return imageLoad(level2, texel);
-				case 3: return imageLoad(level3, texel);
-				case 4: return imageLoad(level4, texel);
-				case 5: return imageLoad(level5, texel);
-				case 6: return imageLoad(level6, texel);
-				}
-				return vec4(0.0);
 			}
 
 			void store(int level, ivec2 texel, vec4 value) {
@@ -149,7 +141,7 @@ final class MipmapCompute {
 				}
 			}
 
-			// Levels that each halve the one above exactly, from one 64 by 64 tile of level0: each
+			// Levels that each halve the one above exactly, from one 64 by 64 tile of level 0: each
 			// invocation filters a 2 by 2 block of level 1 and averages it into one texel of level
 			// 2, and shared memory carries the 16 by 16 texels of level 2 down from there. Exact
 			// halving is what keeps a tile to itself: every texel inside the image reads only
@@ -203,7 +195,7 @@ final class MipmapCompute {
 			}
 
 			// One level that does not halve the one above: the blit's tap, at the centre of the
-			// texel written scaled onto level0.
+			// texel written scaled onto level 0.
 			void single() {
 				uint index = gl_LocalInvocationIndex;
 				ivec2 pos = ivec2(gl_WorkGroupID.xy) * 16 + ivec2(index & 15u, index >> 4u);
@@ -213,28 +205,49 @@ final class MipmapCompute {
 				}
 			}
 
-			// The small levels, all in one workgroup, each read back through image loads once the
-			// whole group has stored it. The same tap as single(), filtered by hand.
+			// The small levels, all in one workgroup and in shared memory, one level at a time. The
+			// first is the tap single() takes; each after it is that tap filtered by hand from the
+			// level before, with the weights the linear filter gives. A level after the first has
+			// half the texels of the one before it at most, so two per invocation.
 			void tail() {
-				for (int level = 1; level <= chain.count; level++) {
-					if (level > 1) {
-						memoryBarrierImage();
-						barrier();
+				int index = int(gl_LocalInvocationIndex);
+				ivec2 size = sizeOf(1);
+				for (int n = index; n < size.x * size.y; n += 256) {
+					ivec2 pos = ivec2(n % size.x, n / size.x);
+					vec4 value = textureLod(source, (vec2(pos) + 0.5) / vec2(size), 0.0);
+					store(1, pos, value);
+					cells[n] = value;
+				}
+
+				for (int level = 2; level <= chain.count; level++) {
+					ivec2 above = size;
+					size = sizeOf(level);
+					vec2 scale = vec2(above) / vec2(size);
+					vec4 values[2];
+					barrier();
+					for (int k = 0; k < 2; k++) {
+						int n = index + k * 256;
+						if (n < size.x * size.y) {
+							ivec2 pos = ivec2(n % size.x, n / size.x);
+							vec2 at = (vec2(pos) + 0.5) * scale - 0.5;
+							ivec2 low = ivec2(floor(at));
+							vec2 f = at - vec2(low);
+							ivec2 lo = clamp(low, ivec2(0), above - 1);
+							ivec2 hi = clamp(low + 1, ivec2(0), above - 1);
+							vec4 top = mix(cells[lo.y * above.x + lo.x], cells[lo.y * above.x + hi.x], f.x);
+							vec4 bottom = mix(cells[hi.y * above.x + lo.x], cells[hi.y * above.x + hi.x], f.x);
+							values[k] = mix(top, bottom, f.y);
+							store(level, pos, values[k]);
+						}
 					}
 
-					ivec2 above = sizeOf(level - 1);
-					ivec2 size = sizeOf(level);
-					vec2 scale = vec2(above) / vec2(size);
-					for (int n = int(gl_LocalInvocationIndex); n < size.x * size.y; n += 256) {
-						ivec2 pos = ivec2(n % size.x, n / size.x);
-						vec2 at = (vec2(pos) + 0.5) * scale - 0.5;
-						ivec2 low = ivec2(floor(at));
-						vec2 f = at - vec2(low);
-						ivec2 lo = clamp(low, ivec2(0), above - 1);
-						ivec2 hi = clamp(low + 1, ivec2(0), above - 1);
-						vec4 top = mix(load(level - 1, lo), load(level - 1, ivec2(hi.x, lo.y)), f.x);
-						vec4 bottom = mix(load(level - 1, ivec2(lo.x, hi.y)), load(level - 1, hi), f.x);
-						store(level, pos, mix(top, bottom, f.y));
+					// Every invocation has read the level above before any overwrites it.
+					barrier();
+					for (int k = 0; k < 2; k++) {
+						int n = index + k * 256;
+						if (n < size.x * size.y) {
+							cells[n] = values[k];
+						}
 					}
 				}
 			}
@@ -435,8 +448,8 @@ final class MipmapCompute {
 				.pImageInfo(sampled);
 		for (int i = 0; i < STORAGE_BINDINGS; i++) {
 			// A binding past the levels this step writes still has to hold a valid view, the shader
-			// naming it statically; the level read is one, and nothing touches it there.
-			int level = i <= step.count() ? above + i : above;
+			// naming it statically; the first level written is one, and nothing stores there twice.
+			int level = step.first() + (i < step.count() ? i : 0);
 			VkDescriptorImageInfo.Buffer image = VkDescriptorImageInfo.calloc(1, stack)
 					.imageView(handle(surface.levelView(level)))
 					.imageLayout(VK10.VK_IMAGE_LAYOUT_GENERAL);
@@ -455,15 +468,14 @@ final class MipmapCompute {
 		return ((VulkanGpuTextureView) view).vkImageView();
 	}
 
-	/** The levels one dispatch stored become what the next one samples or loads. */
+	/** The last level one dispatch stored becomes what the next one samples. */
 	private static void betweenSteps(VkCommandBuffer commands, MemoryStack stack) {
 		VkMemoryBarrier2.Buffer barrier = VkMemoryBarrier2.calloc(1, stack)
 				.sType$Default()
 				.srcStageMask(KHRSynchronization2.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR)
 				.srcAccessMask(KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR)
 				.dstStageMask(KHRSynchronization2.VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR)
-				.dstAccessMask(KHRSynchronization2.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR
-						| KHRSynchronization2.VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR);
+				.dstAccessMask(KHRSynchronization2.VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR);
 		KHRSynchronization2.vkCmdPipelineBarrier2KHR(commands,
 				VkDependencyInfo.calloc(stack).sType$Default().pMemoryBarriers(barrier));
 	}
@@ -550,7 +562,7 @@ final class MipmapCompute {
 	}
 
 	private static long build(VulkanDevice vulkan, GpuFormat format) {
-		ByteBuffer spirv = compile(SOURCE.replace("FORMAT", qualifier(format)));
+		ByteBuffer spirv = compile(source(qualifier(format)));
 		if (spirv == null) {
 			return 0L;
 		}
@@ -630,6 +642,11 @@ final class MipmapCompute {
 		if (result != VK10.VK_SUCCESS) {
 			throw new IllegalStateException("vkCreate " + what + " answered " + result);
 		}
+	}
+
+	/** The shader for one storage qualifier. */
+	static String source(String qualifier) {
+		return SOURCE.replace("FORMAT", qualifier).replace("TAIL_TEXELS", Integer.toString(TAIL_TEXELS));
 	}
 
 	/** SPIR-V for the source, or null where shaderc refused it; freed by the caller. */
