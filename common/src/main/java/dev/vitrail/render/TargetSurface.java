@@ -36,6 +36,13 @@ final class TargetSurface implements AutoCloseable {
 	/** Whether a compute of the pack writes this target as an image, which is a usage bit at creation. */
 	private final boolean storage;
 
+	/**
+	 * Whether {@link MipmapCompute} fills this chain, which takes storage usage and a view of each
+	 * level. Settled at each allocation: the device's answer for the format does not change, but
+	 * a resize can take a chain from one level to several.
+	 */
+	private boolean mipStorage;
+
 	private GpuTexture texture;
 	private GpuTextureView view;
 
@@ -44,6 +51,12 @@ final class TargetSurface implements AutoCloseable {
 	 * {@link #view} is one level already.
 	 */
 	private GpuTextureView baseView;
+
+	/**
+	 * Each level alone, for the compute that fills the chain; the first is {@link #baseView}. Null
+	 * unless {@link #mipStorage}.
+	 */
+	private GpuTextureView[] levelViews;
 
 	private int width;
 	private int height;
@@ -159,6 +172,20 @@ final class TargetSurface implements AutoCloseable {
 		return this.storage;
 	}
 
+	/** Whether this chain was allocated for {@link MipmapCompute}: storage usage and a view per level. */
+	boolean mipStorage() {
+		return this.mipStorage;
+	}
+
+	GpuFormat format() {
+		return this.format;
+	}
+
+	/** One level alone. Only on a surface allocated for {@link MipmapCompute}. */
+	GpuTextureView levelView(int level) {
+		return this.levelViews[level];
+	}
+
 	/**
 	 * Makes this surface exist at the given size, reallocating when it moved.
 	 *
@@ -185,6 +212,7 @@ final class TargetSurface implements AutoCloseable {
 		// otherwise. Set before anything can read it rather than after, because a resize is exactly
 		// the moment a chain silently stops being true.
 		this.chainWritten = false;
+		this.mipStorage = levels > 1 && MipmapCompute.serves(this.format);
 
 		// Everything or nothing. A view that throws after the texture was made would leave that
 		// texture with no owner: the caller only learns of a surface once the constructor returns,
@@ -195,7 +223,7 @@ final class TargetSurface implements AutoCloseable {
 			// The flag is read by the mixin on the game's usage conversion, inside this one call,
 			// and lowered whatever the call did: a throw that left it up would mark the next
 			// texture anybody creates.
-			TextureUsage.requestStorage(this.storage);
+			TextureUsage.requestStorage(this.storage || this.mipStorage);
 			try {
 				this.texture = device.createTexture(this.label, USAGE, this.format, width, height, 1,
 						levels);
@@ -207,6 +235,14 @@ final class TargetSurface implements AutoCloseable {
 
 			if (levels > 1) {
 				this.baseView = device.createTextureView(this.texture, 0, 1);
+			}
+
+			if (this.mipStorage) {
+				this.levelViews = new GpuTextureView[levels];
+				this.levelViews[0] = this.baseView;
+				for (int level = 1; level < levels; level++) {
+					this.levelViews[level] = device.createTextureView(this.texture, level, 1);
+				}
 			}
 		} catch (RuntimeException e) {
 			close();
@@ -220,6 +256,17 @@ final class TargetSurface implements AutoCloseable {
 	 */
 	@Override
 	public void close() {
+		if (this.levelViews != null) {
+			// The first is the base view, closed below.
+			for (int level = 1; level < this.levelViews.length; level++) {
+				if (this.levelViews[level] != null) {
+					this.levelViews[level].close();
+				}
+			}
+
+			this.levelViews = null;
+		}
+
 		if (this.baseView != null) {
 			this.baseView.close();
 			this.baseView = null;

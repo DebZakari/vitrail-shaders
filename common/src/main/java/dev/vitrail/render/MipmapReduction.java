@@ -47,7 +47,7 @@ final class MipmapReduction {
 			return false;
 		}
 
-		if (!generate(encoder, surface.texture())) {
+		if (!fill(encoder, surface.texture(), surface)) {
 			return false;
 		}
 
@@ -64,6 +64,15 @@ final class MipmapReduction {
 	 *         held and the caller must keep its readers at the base
 	 */
 	static boolean generate(CommandEncoder encoder, GpuTexture texture) {
+		return fill(encoder, texture, null);
+	}
+
+	/**
+	 * By compute where the surface was allocated for it, and by blits otherwise.
+	 *
+	 * @param surface the colour target the texture belongs to, or null for the shadow map
+	 */
+	private static boolean fill(CommandEncoder encoder, GpuTexture texture, TargetSurface surface) {
 		if (texture == null || texture.getMipLevels() <= 1) {
 			return false;
 		}
@@ -78,7 +87,8 @@ final class MipmapReduction {
 		// between the two passes around it. One label for every chain, so the row is summed rather
 		// than split into rows too small to make the report.
 		PassTimings.openSpan(encoder, () -> "Vitrail mip chain");
-		boolean filled = commands.vitrail$generateMipmaps(texture);
+		boolean filled = (surface != null && MipmapCompute.generate(encoder, surface))
+				|| commands.vitrail$generateMipmaps(texture);
 		PassTimings.closeSpan(encoder);
 
 		return filled;
