@@ -18,9 +18,10 @@ package dev.vitrail.render;
  * and which has nothing in it to get wrong.
  * <p>
  * <strong>Nothing here names an API of the game</strong>, which is what lets the off-game harness
- * compile it and measure the numbers. That harness is the only witness this arithmetic has: the
- * values reach the shader as bytes read straight off the element, so no generated text stands
- * between the two sides and there is nothing in the game to read back and compare.
+ * compile it and measure the numbers, and {@code EntityFrameTest} hold its words and its size. Those
+ * two are the only witnesses this arithmetic has: the values reach the shader as bytes read straight
+ * off the element, so no generated text stands between the two sides and there is nothing in the
+ * game to read back and compare.
  * <p>
  * The arithmetic is Iris's, {@code vertices/NormalHelper.computeTangent} and
  * {@code computeTangentSmooth}, and it is the standard tangent of a triangle: the two texture
@@ -122,12 +123,13 @@ public final class EntityFrame {
 	 * already give both texture gradients, and this is Iris's own reading as well.
 	 *
 	 * <p>
-	 * <strong>Three methods and not one, and each has to stay under 325 bytes of bytecode.</strong>
-	 * That is the most C2 inlines of a hot method ({@code FreqInlineSize}), and in one piece this was
-	 * 494: every quad {@link dev.vitrail.sodium.EntityMeshSerializer} converts paid a call with
-	 * nineteen float arguments, which with the copy beside it was half the serializer's time on a
-	 * field of mobs. In three it inlines whole. The arithmetic is the same and in the same order, so
-	 * every word is the same as the one method's.
+	 * <strong>Three methods and not one, and each has to stay at or under 325 bytes of
+	 * bytecode.</strong> That is the most C2 inlines of a hot method ({@code FreqInlineSize}). Written
+	 * as one method the arithmetic is 494 bytes, and every quad
+	 * {@link dev.vitrail.sodium.EntityMeshSerializer} converts would pay a call with nineteen float
+	 * arguments: measured off-game over a field of mobs, about a quarter of the serializer's time. In
+	 * three pieces it inlines whole. Each piece hands the next the values it computed, in the order
+	 * one method would, so the split changes no word.
 	 *
 	 * @param flatten whether the corners are first flattened onto the plane the normal stands on,
 	 *                which is what Iris does for a polygon lit from a normal per corner

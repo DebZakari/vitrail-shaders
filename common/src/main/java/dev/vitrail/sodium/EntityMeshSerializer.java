@@ -194,11 +194,15 @@ public final class EntityMeshSerializer implements VertexSerializer {
 	 * <p>
 	 * <strong>Moved a word at a time and not with {@code MemoryUtil.memCopy}</strong>, which is a call
 	 * into {@code Unsafe.copyMemory} whatever the length. At thirty-six bytes that call costs more than
-	 * the bytes do, and with the tangent's call it was half this serializer's time on a field of mobs.
-	 * A word read and written back in the machine's own order is the same bytes in the same places,
-	 * so this moves nothing the format laid out. Straight lines and not a loop over the stride: C2
-	 * profiles a loop's tail as rare and leaves it out of line. A vertex of any other length still
+	 * the bytes do: measured off-game over a field of mobs, it is about a quarter of this serializer's
+	 * time. A word read and written back in the machine's own order is the same bytes in the same
+	 * places, so this moves nothing the format laid out. Straight lines and not a loop over the stride:
+	 * C2 profiles a loop's tail as rare and leaves it out of line. A vertex of any other length still
 	 * goes through {@code memCopy}.
+	 * <p>
+	 * The longs go through {@link UnalignedLongs}, because at the game's stride every other vertex
+	 * starts four bytes past a multiple of eight. Nine ints would need no such care, and cost back a
+	 * quarter of what the words save.
 	 * <p>
 	 * Four shorts and not one long, for the reason {@code BufferBuilderMixin} writes four:
 	 * {@code MemoryUtil} writes in the machine's own order, so a short at a time lands each lane
@@ -207,10 +211,10 @@ public final class EntityMeshSerializer implements VertexSerializer {
 	 */
 	private static void copy(long from, long into, short entity, short blockEntity, short item) {
 		if (WORDS) {
-			MemoryUtil.memPutLong(into, MemoryUtil.memGetLong(from));
-			MemoryUtil.memPutLong(into + 8L, MemoryUtil.memGetLong(from + 8L));
-			MemoryUtil.memPutLong(into + 16L, MemoryUtil.memGetLong(from + 16L));
-			MemoryUtil.memPutLong(into + 24L, MemoryUtil.memGetLong(from + 24L));
+			UnalignedLongs.put(into, UnalignedLongs.get(from));
+			UnalignedLongs.put(into + 8L, UnalignedLongs.get(from + 8L));
+			UnalignedLongs.put(into + 16L, UnalignedLongs.get(from + 16L));
+			UnalignedLongs.put(into + 24L, UnalignedLongs.get(from + 24L));
 			MemoryUtil.memPutInt(into + 32L, MemoryUtil.memGetInt(from + 32L));
 		} else {
 			MemoryUtil.memCopy(from, into, WRITTEN);
