@@ -540,6 +540,14 @@ public final class PassTimings {
 			censusOpenLabel = label;
 		}
 
+		openSpan(encoder, label);
+	}
+
+	/**
+	 * Writes the opening timestamp of work recorded outside any pass, a mip chain's blits, under a
+	 * label of its own. The census counts passes and leaves this out.
+	 */
+	public static void openSpan(CommandEncoder encoder, Supplier<String> label) {
 		if (!ENABLED) {
 			return;
 		}
@@ -573,6 +581,11 @@ public final class PassTimings {
 			censusOpenLabel = null;
 		}
 
+		closeSpan(encoder);
+	}
+
+	/** Writes the closing timestamp of the span {@link #openSpan} began. */
+	public static void closeSpan(CommandEncoder encoder) {
 		if (!ENABLED) {
 			return;
 		}

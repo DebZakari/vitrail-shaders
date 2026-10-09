@@ -1,6 +1,7 @@
 package dev.vitrail.render;
 
 import dev.vitrail.mixin.access.CommandEncoderAccessor;
+import dev.vitrail.render.timing.PassTimings;
 
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.CommandEncoderBackend;
@@ -69,8 +70,17 @@ final class MipmapReduction {
 
 		GeometryHold.flush(() -> "a mip chain being filled");
 		CommandEncoderBackend backend = ((CommandEncoderAccessor) encoder).vitrail$backend();
+		if (!(backend instanceof MipmapCommands commands)) {
+			return false;
+		}
 
-		return backend instanceof MipmapCommands commands
-				&& commands.vitrail$generateMipmaps(texture);
+		// Timed as a row of its own: recorded outside any pass, a chain was otherwise only a gap
+		// between the two passes around it. One label for every chain, so the row is summed rather
+		// than split into rows too small to make the report.
+		PassTimings.openSpan(encoder, () -> "Vitrail mip chain");
+		boolean filled = commands.vitrail$generateMipmaps(texture);
+		PassTimings.closeSpan(encoder);
+
+		return filled;
 	}
 }
