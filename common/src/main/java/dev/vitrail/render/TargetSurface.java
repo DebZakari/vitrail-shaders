@@ -7,6 +7,8 @@ import com.mojang.blaze3d.textures.GpuTexture;
 import com.mojang.blaze3d.textures.GpuTextureView;
 import net.minecraft.util.Mth;
 
+import java.util.List;
+
 /**
  * One colour target of a pack: its texture, the view a sampler reads it whole through, and the
  * view of its base level alone for a compute to store into.
@@ -42,6 +44,9 @@ final class TargetSurface implements AutoCloseable {
 	 * a resize can take a chain from one level to several.
 	 */
 	private boolean mipStorage;
+
+	/** The dispatches that fill the chain, fixed by its size. Empty unless {@link #mipStorage}. */
+	private List<MipmapCompute.Step> mipPlan = List.of();
 
 	private GpuTexture texture;
 	private GpuTextureView view;
@@ -181,6 +186,11 @@ final class TargetSurface implements AutoCloseable {
 		return this.format;
 	}
 
+	/** The dispatches {@link MipmapCompute} fills this chain in, planned once per allocation. */
+	List<MipmapCompute.Step> mipPlan() {
+		return this.mipPlan;
+	}
+
 	/** One level alone. Only on a surface allocated for {@link MipmapCompute}. */
 	GpuTextureView levelView(int level) {
 		return this.levelViews[level];
@@ -213,6 +223,7 @@ final class TargetSurface implements AutoCloseable {
 		// the moment a chain silently stops being true.
 		this.chainWritten = false;
 		this.mipStorage = levels > 1 && MipmapCompute.serves(this.format);
+		this.mipPlan = this.mipStorage ? MipmapCompute.plan(width, height, levels) : List.of();
 
 		// Everything or nothing. A view that throws after the texture was made would leave that
 		// texture with no owner: the caller only learns of a surface once the constructor returns,
