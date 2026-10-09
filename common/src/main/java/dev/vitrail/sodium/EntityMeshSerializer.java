@@ -51,6 +51,13 @@ public final class EntityMeshSerializer implements VertexSerializer {
 	/** What this engine binds, which is that plus the three elements. */
 	private static final int CARRIED = EntityMesh.format().getVertexSize();
 
+	/**
+	 * Whether the game's vertex is the thirty-six bytes {@link #copy} moves as four longs and an int.
+	 * Asked of the format rather than assumed, and a constant, so the JIT keeps one of the two roads
+	 * and drops the other.
+	 */
+	private static final boolean WORDS = WRITTEN == 4 * Long.BYTES + Integer.BYTES;
+
 	/** Where the identifiers start inside one of those, taken off the format rather than counted. */
 	private static final int IDENTIFIERS = carried(EntityVertex.IDENTIFIERS);
 
@@ -185,13 +192,29 @@ public final class EntityMeshSerializer implements VertexSerializer {
 	/**
 	 * One vertex of Sodium's over one of this engine's, with the identifiers written after it.
 	 * <p>
+	 * <strong>Moved a word at a time and not with {@code MemoryUtil.memCopy}</strong>, which is a call
+	 * into {@code Unsafe.copyMemory} whatever the length. At thirty-six bytes that call costs more than
+	 * the bytes do, and with the tangent's call it was half this serializer's time on a field of mobs.
+	 * A word read and written back in the machine's own order is the same bytes in the same places,
+	 * so this moves nothing the format laid out. Straight lines and not a loop over the stride: C2
+	 * profiles a loop's tail as rare and leaves it out of line. A vertex of any other length still
+	 * goes through {@code memCopy}.
+	 * <p>
 	 * Four shorts and not one long, for the reason {@code BufferBuilderMixin} writes four:
 	 * {@code MemoryUtil} writes in the machine's own order, so a short at a time lands each lane
 	 * where the format put it whichever way round the machine is. The fourth lane is a lane of the
 	 * element like the other three and is written at nought rather than left.
 	 */
 	private static void copy(long from, long into, short entity, short blockEntity, short item) {
-		MemoryUtil.memCopy(from, into, WRITTEN);
+		if (WORDS) {
+			MemoryUtil.memPutLong(into, MemoryUtil.memGetLong(from));
+			MemoryUtil.memPutLong(into + 8L, MemoryUtil.memGetLong(from + 8L));
+			MemoryUtil.memPutLong(into + 16L, MemoryUtil.memGetLong(from + 16L));
+			MemoryUtil.memPutLong(into + 24L, MemoryUtil.memGetLong(from + 24L));
+			MemoryUtil.memPutInt(into + 32L, MemoryUtil.memGetInt(from + 32L));
+		} else {
+			MemoryUtil.memCopy(from, into, WRITTEN);
+		}
 		MemoryUtil.memPutShort(into + IDENTIFIERS, entity);
 		MemoryUtil.memPutShort(into + IDENTIFIERS + 2L, blockEntity);
 		MemoryUtil.memPutShort(into + IDENTIFIERS + 4L, item);
