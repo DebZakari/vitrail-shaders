@@ -6,6 +6,7 @@ import dev.vitrail.mixin.access.VulkanCommandEncoderAccessor;
 import dev.vitrail.render.timing.PassBarrier;
 import dev.vitrail.Vitrail;
 
+import com.mojang.blaze3d.GpuDeviceLossException;
 import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.GpuDevice;
@@ -284,8 +285,10 @@ final class MipmapCompute {
 	 * the answer decides its usage and its views.
 	 */
 	static boolean serves(GpuFormat format) {
-		return qualifier(format) != null && GpuFormats.storageCapable(format)
-				&& GpuFormats.filtersLinearly(format) && limitsFit();
+		// A format whose pipeline already failed keeps its blits, and so needs no storage usage.
+		return qualifier(format) != null && PIPELINES.getOrDefault(format, -1L) != 0L
+				&& GpuFormats.storageCapable(format) && GpuFormats.filtersLinearly(format)
+				&& limitsFit();
 	}
 
 	/** The dispatches that fill levels 1 to {@code levels - 1} of an image of that size. */
@@ -548,6 +551,8 @@ final class MipmapCompute {
 		long pipeline = 0L;
 		try {
 			pipeline = build(vulkan, format);
+		} catch (GpuDeviceLossException e) {
+			throw e;
 		} catch (RuntimeException e) {
 			Vitrail.logger().warn("mip chain compute for {} failed, its chains stay blits: {}", format,
 					e.toString());

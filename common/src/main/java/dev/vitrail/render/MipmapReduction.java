@@ -27,6 +27,10 @@ import com.mojang.blaze3d.textures.GpuTexture;
  * longer side: a render pass per level was the road before it, and the game refuses a pass on a
  * level whose shorter side shifts to nought, so that road stopped a level short of OpenGL's chain
  * on every screen that is not as tall as it is wide.
+ * <p>
+ * A colour target allocated for it is filled by {@link MipmapCompute} instead, in a few dispatches
+ * rather than a blit per level, to the same values; the blits remain for every other chain and
+ * for any the compute declines.
  */
 final class MipmapReduction {
 
@@ -85,11 +89,14 @@ final class MipmapReduction {
 
 		// Timed as a row of its own: recorded outside any pass, a chain was otherwise only a gap
 		// between the two passes around it. One label for every chain, so the row is summed rather
-		// than split into rows too small to make the report.
-		PassTimings.openSpan(encoder, () -> "Vitrail mip chain");
+		// than split into rows too small to make the report. Closed only if opened here: inside a
+		// pass, closing would end the pass's own span early, under its name.
+		boolean timed = PassTimings.openSpan(encoder, () -> "Vitrail mip chain");
 		boolean filled = (surface != null && MipmapCompute.generate(encoder, surface))
 				|| commands.vitrail$generateMipmaps(texture);
-		PassTimings.closeSpan(encoder);
+		if (timed) {
+			PassTimings.closeSpan(encoder);
+		}
 
 		return filled;
 	}

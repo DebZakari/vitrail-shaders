@@ -89,6 +89,21 @@ class MipmapComputeTest {
 	}
 
 	@Test
+	void shaderMatchesTheConstants() {
+		// The shader is written for these; the plan and the bindings are counted from them.
+		assertTrue(MipmapCompute.SOURCE.contains("layout(local_size_x = " + MipmapCompute.GROUP + ") in;"));
+		assertEquals(256, MipmapCompute.GROUP, "tile() lays a group out as 16 by 16");
+		assertEquals(MipmapCompute.TAIL_LEVELS,
+				MipmapCompute.SOURCE.split("uniform writeonly image2D", -1).length - 1);
+		assertTrue(MipmapCompute.SOURCE.contains("case " + MipmapCompute.TAIL_LEVELS + ": imageStore"));
+		// The level after the tail's first is filled two texels per invocation, and the first fits
+		// the 16 KiB of shared memory every device gives a workgroup.
+		assertTrue(MipmapCompute.TAIL_TEXELS <= 4 * MipmapCompute.GROUP);
+		assertTrue(MipmapCompute.TAIL_TEXELS * 16 <= 16384);
+		assertTrue(MipmapCompute.TILE_LEVELS <= MipmapCompute.TAIL_LEVELS);
+	}
+
+	@Test
 	void shaderCompilesForEveryFormatItServes() {
 		List<String> qualifiers = MipmapCompute.qualifiers();
 		assertTrue(qualifiers.contains("rgba8") && qualifiers.contains("r11f_g11f_b10f"));
