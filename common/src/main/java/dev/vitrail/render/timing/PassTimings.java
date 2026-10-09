@@ -544,12 +544,14 @@ public final class PassTimings {
 	}
 
 	/**
-	 * Writes the opening timestamp of work recorded outside any pass, a mip chain's blits, under a
+	 * Writes the opening timestamp of work recorded outside any pass, a mip chain's fill, under a
 	 * label of its own. The census counts passes and leaves this out.
+	 *
+	 * @return whether a span was opened, which is the caller's to close; none is inside a pass
 	 */
-	public static void openSpan(CommandEncoder encoder, Supplier<String> label) {
+	public static boolean openSpan(CommandEncoder encoder, Supplier<String> label) {
 		if (!ENABLED) {
-			return;
+			return false;
 		}
 
 		Frame frame = current;
@@ -558,18 +560,20 @@ public final class PassTimings {
 		}
 
 		if (frame.open) {
-			// A pass inside a pass, which the encoder refuses before this is reached.
-			return;
+			// A pass inside a pass, which the encoder refuses before this is reached, or work that
+			// was to stand outside every pass recorded inside one.
+			return false;
 		}
 
 		if (frame.count == PASSES_PER_FRAME) {
 			frame.overflow = true;
-			return;
+			return false;
 		}
 
 		encoder.writeTimestamp(pool, frame.slot * QUERIES_PER_FRAME + frame.count * 2);
 		frame.openLabel = label;
 		frame.open = true;
+		return true;
 	}
 
 	/** Writes the closing timestamp of the pass {@link #open} began, after the backend submitted it. */
