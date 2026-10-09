@@ -1274,12 +1274,13 @@ public final class PackChain {
 
 		FamilyWarmup.awaitAll();
 
-		// The far terrain's two corner rings, the one-texel constants and the comparison sampler
-		// survive every release on purpose, so the shutdown is the one caller that really frees
-		// them.
+		// The far terrain's two corner rings, the one-texel constants, the comparison sampler and
+		// the mip chain pipelines survive every release on purpose, so the shutdown is the one
+		// caller that really frees them.
 		DistantDraw.close();
 		ConstantTextures.close();
 		ShadowCompare.close();
+		MipmapCompute.close();
 		GeometryStage.close();
 	}
 

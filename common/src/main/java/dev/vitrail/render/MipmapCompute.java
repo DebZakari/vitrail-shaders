@@ -1,8 +1,10 @@
 package dev.vitrail.render;
 
+import dev.vitrail.glsl.LoadClock;
 import dev.vitrail.mixin.access.CommandEncoderAccessor;
 import dev.vitrail.mixin.access.GpuDeviceAccessor;
 import dev.vitrail.mixin.access.VulkanCommandEncoderAccessor;
+import dev.vitrail.render.storage.GpuRecording;
 import dev.vitrail.render.timing.PassBarrier;
 import dev.vitrail.Vitrail;
 
@@ -36,6 +38,8 @@ import org.lwjgl.vulkan.VkPhysicalDeviceProperties;
 import org.lwjgl.vulkan.VkPipelineLayoutCreateInfo;
 import org.lwjgl.vulkan.VkPushConstantRange;
 import org.lwjgl.vulkan.VkShaderModuleCreateInfo;
+import org.lwjgl.vulkan.VkSpecializationInfo;
+import org.lwjgl.vulkan.VkSpecializationMapEntry;
 import org.lwjgl.vulkan.VkWriteDescriptorSet;
 
 import java.nio.ByteBuffer;
@@ -65,7 +69,8 @@ import java.util.Objects;
  * format away from the blit's.
  * <p>
  * Only for a colour format the device stores into, filters linearly and that has a GLSL storage
- * qualifier; anything else keeps the blits, as does a chain recorded with a pass open. The surface
+ * qualifier, and only on NVIDIA, the one vendor where storage usage was measured to cost the target
+ * nothing; anything else keeps the blits, as does a chain recorded with a pass open. The surface
  * has to have asked for storage usage and per-level views at allocation, which
  * {@link TargetSurface} does through {@link #serves}.
  */
@@ -96,9 +101,6 @@ final class MipmapCompute {
 
 	private static final int PUSH_CONSTANT_BYTES = 16;
 
-	private static final int SHADERC_VULKAN_1_2 = 4202496;
-	private static final int SHADERC_COMPUTE = 2;
-
 	static final String SOURCE = """
 			#version 450
 
@@ -122,8 +124,10 @@ final class MipmapCompute {
 				int count;   // levels written
 			} chain;
 
-			// A tile's 16 by 16 texels of level 2, or a whole tail level.
-			shared vec4 cells[TAIL_TEXELS];
+			// A tile's 16 by 16 texels of level 2, or a whole tail level. Sized per pipeline, so the
+			// dispatches over the large levels do not reserve the tail's 16 KiB.
+			layout(constant_id = 0) const int CELLS = TAIL_TEXELS;
+			shared vec4 cells[CELLS];
 
 			// The extent of a level, which floors at one texel the way the image's own levels do.
 			ivec2 sizeOf(int level) {
@@ -268,27 +272,52 @@ final class MipmapCompute {
 	record Step(int mode, int first, int count) {
 	}
 
-	/** Pipelines by format, 0 where a format failed to build: it keeps the blits from then on. */
-	private static final Map<GpuFormat, Long> PIPELINES = new HashMap<>();
+	/**
+	 * One format's two pipelines from the same module: the tile's and single's, whose shared memory
+	 * is a tile's 16 by 16 texels, and the tail's, whose is {@link #TAIL_TEXELS}.
+	 */
+	private record Pipelines(long blocks, long tail) {
+
+		boolean built() {
+			return this.blocks != 0L && this.tail != 0L;
+		}
+
+		long of(Step step) {
+			return step.mode() == TAIL ? this.tail : this.blocks;
+		}
+	}
+
+	private static final Pipelines FAILED = new Pipelines(0L, 0L);
+
+	/** Pipelines by format, {@link #FAILED} where a format failed to build: it keeps the blits. */
+	private static final Map<GpuFormat, Pipelines> PIPELINES = new HashMap<>();
 
 	private static long setLayout;
 	private static long pipelineLayout;
 
-	/** Null until a device was asked, then whether its limits fit the layout. */
-	private static Boolean limitsFit;
+	/** NVIDIA's PCI vendor id. */
+	private static final int NVIDIA = 0x10DE;
+
+	/** Null until a device was asked, then whether it is one this serves. */
+	private static Boolean deviceFits;
 
 	private MipmapCompute() {
 	}
 
 	/**
 	 * Whether a chain of this format can be filled here, which a surface asks before it allocates:
-	 * the answer decides its usage and its views.
+	 * the answer decides its usage and its views. The pipeline is built here, at allocation, rather
+	 * than inside the first frame that fills a chain, and a format whose pipeline fails keeps its
+	 * blits, so needs no storage usage.
 	 */
 	static boolean serves(GpuFormat format) {
-		// A format whose pipeline already failed keeps its blits, and so needs no storage usage.
-		return qualifier(format) != null && PIPELINES.getOrDefault(format, -1L) != 0L
-				&& GpuFormats.storageCapable(format) && GpuFormats.filtersLinearly(format)
-				&& limitsFit();
+		if (qualifier(format) == null || !GpuFormats.storageCapable(format)
+				|| !GpuFormats.filtersLinearly(format) || !deviceFits()) {
+			return false;
+		}
+
+		VulkanDevice vulkan = vulkan();
+		return vulkan != null && pipelines(vulkan, format).built();
 	}
 
 	/** The dispatches that fill levels 1 to {@code levels - 1} of an image of that size. */
@@ -394,20 +423,20 @@ final class MipmapCompute {
 			return false;
 		}
 
-		long pipeline = pipeline(vulkan, surface.format());
-		if (pipeline == 0L) {
+		Pipelines pipelines = pipelines(vulkan, surface.format());
+		if (!pipelines.built()) {
 			return false;
 		}
 
 		int width = surface.width();
 		int height = surface.height();
-		List<Step> steps = plan(width, height, surface.levels());
+		List<Step> steps = surface.mipPlan();
 		long sampler = ((VulkanGpuSampler) PackPass.sampler(false, FilterMode.LINEAR, false)).vkSampler();
 		// The wide wait, when armed, stands after every dispatch as it stands after every blit.
 		boolean wide = PassBarrier.full();
 		VkCommandBuffer commands = access.vitrail$commandBuffer();
 		try (MemoryStack stack = MemoryStack.stackPush()) {
-			VK12.vkCmdBindPipeline(commands, VK12.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+			long bound = 0L;
 			for (int s = 0; s < steps.size(); s++) {
 				Step step = steps.get(s);
 				if (s > 0) {
@@ -416,6 +445,12 @@ final class MipmapCompute {
 					} else {
 						betweenSteps(commands, stack);
 					}
+				}
+
+				long pipeline = pipelines.of(step);
+				if (pipeline != bound) {
+					VK12.vkCmdBindPipeline(commands, VK12.VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
+					bound = pipeline;
 				}
 
 				pushDescriptors(commands, stack, surface, step, sampler);
@@ -517,9 +552,14 @@ final class MipmapCompute {
 				: null;
 	}
 
-	/** Whether the device binds as many storage images and runs as wide a workgroup as this asks. */
-	private static boolean limitsFit() {
-		if (limitsFit == null) {
+	/**
+	 * Whether the device binds as many storage images and runs as wide a workgroup as this asks, and
+	 * is one where storage usage was measured to cost a target nothing. Elsewhere it may not: a
+	 * driver can turn colour compression off for an image that may be stored to, as some AMD and
+	 * Intel parts do, and every pass that writes or samples the target would pay for that.
+	 */
+	private static boolean deviceFits() {
+		if (deviceFits == null) {
 			VulkanDevice vulkan = vulkan();
 			if (vulkan == null) {
 				return false;
@@ -529,28 +569,29 @@ final class MipmapCompute {
 				VkPhysicalDeviceProperties properties = VkPhysicalDeviceProperties.calloc(stack);
 				VK10.vkGetPhysicalDeviceProperties(vulkan.vkDevice().getPhysicalDevice(), properties);
 				VkPhysicalDeviceLimits limits = properties.limits();
-				limitsFit = limits.maxPerStageDescriptorStorageImages() >= STORAGE_BINDINGS
+				deviceFits = properties.vendorID() == NVIDIA
+						&& limits.maxPerStageDescriptorStorageImages() >= STORAGE_BINDINGS
 						&& limits.maxComputeWorkGroupInvocations() >= GROUP
 						&& limits.maxComputeWorkGroupSize(0) >= GROUP;
 			}
 		}
 
-		return limitsFit;
+		return deviceFits;
 	}
 
 	/**
-	 * The pipeline for one format, built on first use and kept for the session: a few handles per
-	 * format a pack mips, against a reload rebuilding them for nothing.
+	 * The pipelines for one format, built on first use and kept until the client shuts down: a few
+	 * handles per format a pack mips, against a reload rebuilding them for nothing.
 	 */
-	private static long pipeline(VulkanDevice vulkan, GpuFormat format) {
-		Long built = PIPELINES.get(format);
+	private static Pipelines pipelines(VulkanDevice vulkan, GpuFormat format) {
+		Pipelines built = PIPELINES.get(format);
 		if (built != null) {
 			return built;
 		}
 
-		long pipeline = 0L;
+		Pipelines pipelines = FAILED;
 		try {
-			pipeline = build(vulkan, format);
+			pipelines = build(vulkan, format);
 		} catch (GpuDeviceLossException e) {
 			throw e;
 		} catch (RuntimeException e) {
@@ -558,21 +599,30 @@ final class MipmapCompute {
 					e.toString());
 		}
 
-		PIPELINES.put(format, pipeline);
-		if (pipeline != 0L) {
+		PIPELINES.put(format, pipelines);
+		if (pipelines.built()) {
 			Vitrail.logger().info("Compiled the mip chain compute for {}", format);
 		}
 
-		return pipeline;
+		return pipelines;
 	}
 
-	private static long build(VulkanDevice vulkan, GpuFormat format) {
-		ByteBuffer spirv = compile(source(qualifier(format)));
+	private static Pipelines build(VulkanDevice vulkan, GpuFormat format) {
+		// Clocked as module work, as the pack's own computes are.
+		long began = System.nanoTime();
+		ByteBuffer spirv;
+		try {
+			spirv = compile(source(qualifier(format)));
+		} finally {
+			LoadClock.module(System.nanoTime() - began);
+		}
+
 		if (spirv == null) {
-			return 0L;
+			return FAILED;
 		}
 
 		long module = 0L;
+		long blocks = 0L;
 		try (MemoryStack stack = MemoryStack.stackPush()) {
 			if (setLayout == 0L) {
 				createLayouts(vulkan, stack);
@@ -583,24 +633,80 @@ final class MipmapCompute {
 					VkShaderModuleCreateInfo.calloc(stack).sType$Default().pCode(spirv), null, handle),
 					"shader module");
 			module = handle.get(0);
-			VkComputePipelineCreateInfo.Buffer info = VkComputePipelineCreateInfo.calloc(1, stack);
-			info.get(0).sType$Default().layout(pipelineLayout).stage()
-					.sType$Default()
-					.stage(VK10.VK_SHADER_STAGE_COMPUTE_BIT)
-					.module(module)
-					.pName(stack.UTF8("main"));
-			check(VK10.vkCreateComputePipelines(vulkan.vkDevice(), 0L, info, null, handle),
-					"pipeline");
+			blocks = create(vulkan, stack, module, GROUP);
 
-			return handle.get(0);
+			return new Pipelines(blocks, create(vulkan, stack, module, TAIL_TEXELS));
+		} catch (RuntimeException e) {
+			// Never recorded yet, so nothing in flight holds it.
+			if (blocks != 0L) {
+				VK10.vkDestroyPipeline(vulkan.vkDevice(), blocks, null);
+			}
+
+			throw e;
 		} finally {
-			// A module is only read while the pipeline is created.
+			// A module is only read while the pipelines are created.
 			if (module != 0L) {
 				VK10.vkDestroyShaderModule(vulkan.vkDevice(), module, null);
 			}
 
 			MemoryUtil.memFree(spirv);
 		}
+	}
+
+	/** One pipeline of the module, its shared memory sized to {@code cells} texels. */
+	private static long create(VulkanDevice vulkan, MemoryStack stack, long module, int cells) {
+		VkSpecializationMapEntry.Buffer entry = VkSpecializationMapEntry.calloc(1, stack)
+				.constantID(0)
+				.offset(0)
+				.size(Integer.BYTES);
+		VkSpecializationInfo specialization = VkSpecializationInfo.calloc(stack)
+				.pMapEntries(entry)
+				.pData(MemoryUtil.memByteBuffer(stack.ints(cells)));
+		VkComputePipelineCreateInfo.Buffer info = VkComputePipelineCreateInfo.calloc(1, stack);
+		info.get(0).sType$Default().layout(pipelineLayout).stage()
+				.sType$Default()
+				.stage(VK10.VK_SHADER_STAGE_COMPUTE_BIT)
+				.module(module)
+				.pName(stack.UTF8("main"))
+				.pSpecializationInfo(specialization);
+		LongBuffer handle = stack.callocLong(1);
+		check(VK10.vkCreateComputePipelines(vulkan.vkDevice(), 0L, info, null, handle), "pipeline");
+
+		return handle.get(0);
+	}
+
+	/** Called when the client shuts down, while the device is still alive. */
+	static void close() {
+		List<Pipelines> pipelines = List.copyOf(PIPELINES.values());
+		long set = setLayout;
+		long layout = pipelineLayout;
+		PIPELINES.clear();
+		setLayout = 0L;
+		pipelineLayout = 0L;
+		deviceFits = null;
+		VulkanDevice vulkan = vulkan();
+		if (vulkan == null) {
+			return;
+		}
+
+		// Deferred like every destruction of this engine's: the last frames may still dispatch them.
+		GpuRecording.destroyLater(() -> {
+			for (Pipelines built : pipelines) {
+				for (long pipeline : new long[] {built.blocks(), built.tail()}) {
+					if (pipeline != 0L) {
+						VK10.vkDestroyPipeline(vulkan.vkDevice(), pipeline, null);
+					}
+				}
+			}
+
+			if (layout != 0L) {
+				VK10.vkDestroyPipelineLayout(vulkan.vkDevice(), layout, null);
+			}
+
+			if (set != 0L) {
+				VK10.vkDestroyDescriptorSetLayout(vulkan.vkDevice(), set, null);
+			}
+		});
 	}
 
 	private static void createLayouts(VulkanDevice vulkan, MemoryStack stack) {
@@ -658,12 +764,13 @@ final class MipmapCompute {
 	static ByteBuffer compile(String source) {
 		long compiler = Shaderc.shaderc_compiler_initialize();
 		long options = Shaderc.shaderc_compile_options_initialize();
-		Shaderc.shaderc_compile_options_set_target_env(options, 0, SHADERC_VULKAN_1_2);
+		Shaderc.shaderc_compile_options_set_target_env(options, Shaderc.shaderc_target_env_vulkan,
+				Shaderc.shaderc_env_version_vulkan_1_2);
 		Shaderc.shaderc_compile_options_set_optimization_level(options, 2);
 		long result = 0L;
 		try {
-			result = Shaderc.shaderc_compile_into_spv(compiler, source, SHADERC_COMPUTE,
-					"vitrail_mip_chain.comp", "main", options);
+			result = Shaderc.shaderc_compile_into_spv(compiler, source,
+					Shaderc.shaderc_compute_shader, "vitrail_mip_chain.comp", "main", options);
 			if (Shaderc.shaderc_result_get_compilation_status(result) != 0) {
 				Vitrail.logger().warn("mip chain compute: {}",
 						Shaderc.shaderc_result_get_error_message(result));

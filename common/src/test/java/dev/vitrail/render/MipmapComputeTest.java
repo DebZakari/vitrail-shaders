@@ -96,6 +96,9 @@ class MipmapComputeTest {
 		assertEquals(MipmapCompute.TAIL_LEVELS,
 				MipmapCompute.SOURCE.split("uniform writeonly image2D", -1).length - 1);
 		assertTrue(MipmapCompute.SOURCE.contains("case " + MipmapCompute.TAIL_LEVELS + ": imageStore"));
+		// The tile's pipeline sizes shared memory to one texel per invocation, its 16 by 16 of level 2.
+		assertTrue(MipmapCompute.SOURCE.contains("const int CELLS = TAIL_TEXELS;"));
+		assertTrue(MipmapCompute.SOURCE.contains("shared vec4 cells[CELLS];"));
 		// The level after the tail's first is filled two texels per invocation, and the first fits
 		// the 16 KiB of shared memory every device gives a workgroup.
 		assertTrue(MipmapCompute.TAIL_TEXELS <= 4 * MipmapCompute.GROUP);
