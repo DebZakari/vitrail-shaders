@@ -360,6 +360,13 @@ covered them: a block of stone or wood showed none while it was mined. While a p
 transparency is off and `SubmitNodeCollectionCrumblingMixin` submits all of them to the breaking
 overlay phase again, which 26.3 executes where 26.2 did.
 
+Fabric Renderer API replaces LevelRenderer's vanilla block-breaking call with an overload carrying
+a `Mesh`. The vanilla correction alone is not reached on that path.
+`SubmitNodeCollectionFabricCrumblingMixin` changes only that overload's read of the solid phase
+while a pack draws, preserving its extended submission and mesh. Its priority permits injection
+into Renderer API's merged method, and its optional descriptor keeps installations without that
+API, including NeoForge, on the vanilla correction.
+
 **The block outline** is the third of those four, drawn from the lines format of the game's, and it
 is the one the full-screen layer could not carry at all rather than carry flat. The layer is composed
 onto the first target the pack's translucent pass writes, which is the scene colour for most packs

@@ -20,6 +20,8 @@ what the next one holds.
   them at the old moment, so the game drew them on its own picture, which the pack's image covers.
   Stone, wood or dirt showed no cracks while mined, and only glass kept them. While a pack draws,
   they are now sent to the moment 26.2 used, and the pack draws them with its own program.
+  With Fabric API installed, its Renderer API replaces the game's call for those cracks, and the
+  correction now reaches that call too.
 
 ## 0.12.0-beta
 
