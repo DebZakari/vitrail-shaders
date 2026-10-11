@@ -1,13 +1,13 @@
 modLoader = "javafml"
 loaderVersion = "[4,)"
 license = "LGPL-3.0-only"
-issueTrackerURL = "https://github.com/avpbynf/Vitrail-Shaders/issues"
+issueTrackerURL = "https://github.com/DebZakari/Vultrum/issues"
 
 [[mods]]
 modId = "${mod_id}"
 version = "${mod_version}"
-displayName = "Vitrail"
-displayURL = "https://github.com/avpbynf/Vitrail-Shaders"
+displayName = "Vitrail (Vultrum build)"
+displayURL = "https://github.com/DebZakari/vitrail-shaders/releases"
 logoFile = "vitrail.png"
 # The same square image under the key current NeoForge reads, which it asks for beside logoFile: a
 # development client that finds logoFile alone stops on a warning screen before the title screen.

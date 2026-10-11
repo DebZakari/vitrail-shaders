@@ -2,15 +2,15 @@
 	"schemaVersion": 1,
 	"id": "${mod_id}",
 	"version": "${mod_version}",
-	"name": "Vitrail",
+	"name": "Vitrail (Vultrum build)",
 	"description": "OptiFine-format shader packs, on Minecraft's native Vulkan renderer",
 	"authors": [
 		"avpbynf"
 	],
 	"contact": {
-		"homepage": "https://github.com/avpbynf/Vitrail-Shaders",
-		"sources": "https://github.com/avpbynf/Vitrail-Shaders",
-		"issues": "https://github.com/avpbynf/Vitrail-Shaders/issues"
+		"homepage": "https://github.com/DebZakari/vitrail-shaders/releases",
+		"sources": "https://github.com/DebZakari/vitrail-shaders",
+		"issues": "https://github.com/DebZakari/Vultrum/issues"
 	},
 	"license": "LGPL-3.0-only",
 	"icon": "vitrail.png",
