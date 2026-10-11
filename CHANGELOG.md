@@ -31,7 +31,7 @@ Vitrail's.
 - **Mobs cost less to draw under a pack that does not read their tangent.** Every face of a mob, a
   block entity or a held item had the direction its texture runs in worked out as it was written,
   for packs that map normals onto them. A pack whose programs never ask for it, Complementary at its
-  default settings among them, now has that step skipped, which on a field of 262 mobs takes
+  default settings among them, now has that step skipped, which on a field of 255 mobs takes
   0.12-0.16 ms off every frame. A pack that does ask for it gets it as before.
 
 ### Fixed
