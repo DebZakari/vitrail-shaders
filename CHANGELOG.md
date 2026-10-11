@@ -11,6 +11,22 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## 0.12.0-beta.vultrum.2
+
+A build of 0.12.0-beta made for [Vultrum](https://github.com/DebZakari/Vultrum), not a release of
+Vitrail's own. It is 0.12.0-beta.vultrum.1 with a different fix for the block cracks. Report its
+bugs to Vultrum's issues, not to Vitrail's.
+
+### Fixed
+
+- **The cracks over a block being mined are drawn where 26.3 draws them.** 0.12.0-beta.vultrum.1
+  sent the cracks over an opaque block back to the moment 26.2 used, and needed a second change for
+  Fabric API, which replaces the game's call for them. They now stay where 26.3 puts them, among
+  the solid blocks, and the pack draws them there with its own `gbuffers_damagedblock`, as Iris
+  does. The crack over stone and the crack over glass both show, with Fabric API or without it.
+  The fix is elNino0916's, from Vitrail's pull request
+  [#460](https://github.com/avpbynf/vitrail-shaders/pull/460).
+
 ## 0.12.0-beta.vultrum.1
 
 A build of 0.12.0-beta made for [Vultrum](https://github.com/DebZakari/Vultrum), not a release of
