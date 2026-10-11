@@ -127,6 +127,10 @@ public final class EntityMeshSerializer implements VertexSerializer {
 	 * middle and {@code EntityFrame.FLAT} for the tangent, which are the two values
 	 * {@code VertexPrologue} hands a mesh carrying neither. Nothing of the game writes a partial quad
 	 * down this road, so it is a guard and not a case.
+	 * <p>
+	 * <strong>Every quad takes that same tangent where no program reads one</strong>, which
+	 * {@code EntityMesh.tangentRead} answers once for the run: it is most of what a quad costs here,
+	 * and {@code docs/internals/entities.md} says when it is skipped.
 	 */
 	@Override
 	public void serialize(long written, long carried, int vertices) {
@@ -152,23 +156,26 @@ public final class EntityMeshSerializer implements VertexSerializer {
 					+ MemoryUtil.memGetFloat(second + TEX_COORD + 4L)
 					+ MemoryUtil.memGetFloat(third + TEX_COORD + 4L)
 					+ MemoryUtil.memGetFloat(fourth + TEX_COORD + 4L)) * 0.25F;
-			int tangent = !tangents ? EntityFrame.FLAT : EntityFrame.tangent(EntityFrame.unpack(normal, 0),
-					EntityFrame.unpack(normal, 1), EntityFrame.unpack(normal, 2), false,
-					MemoryUtil.memGetFloat(from + POSITION),
-					MemoryUtil.memGetFloat(from + POSITION + 4L),
-					MemoryUtil.memGetFloat(from + POSITION + 8L),
-					MemoryUtil.memGetFloat(from + TEX_COORD),
-					MemoryUtil.memGetFloat(from + TEX_COORD + 4L),
-					MemoryUtil.memGetFloat(second + POSITION),
-					MemoryUtil.memGetFloat(second + POSITION + 4L),
-					MemoryUtil.memGetFloat(second + POSITION + 8L),
-					MemoryUtil.memGetFloat(second + TEX_COORD),
-					MemoryUtil.memGetFloat(second + TEX_COORD + 4L),
-					MemoryUtil.memGetFloat(third + POSITION),
-					MemoryUtil.memGetFloat(third + POSITION + 4L),
-					MemoryUtil.memGetFloat(third + POSITION + 8L),
-					MemoryUtil.memGetFloat(third + TEX_COORD),
-					MemoryUtil.memGetFloat(third + TEX_COORD + 4L));
+			int tangent = EntityFrame.FLAT;
+			if (tangents) {
+				tangent = EntityFrame.tangent(EntityFrame.unpack(normal, 0),
+						EntityFrame.unpack(normal, 1), EntityFrame.unpack(normal, 2), false,
+						MemoryUtil.memGetFloat(from + POSITION),
+						MemoryUtil.memGetFloat(from + POSITION + 4L),
+						MemoryUtil.memGetFloat(from + POSITION + 8L),
+						MemoryUtil.memGetFloat(from + TEX_COORD),
+						MemoryUtil.memGetFloat(from + TEX_COORD + 4L),
+						MemoryUtil.memGetFloat(second + POSITION),
+						MemoryUtil.memGetFloat(second + POSITION + 4L),
+						MemoryUtil.memGetFloat(second + POSITION + 8L),
+						MemoryUtil.memGetFloat(second + TEX_COORD),
+						MemoryUtil.memGetFloat(second + TEX_COORD + 4L),
+						MemoryUtil.memGetFloat(third + POSITION),
+						MemoryUtil.memGetFloat(third + POSITION + 4L),
+						MemoryUtil.memGetFloat(third + POSITION + 8L),
+						MemoryUtil.memGetFloat(third + TEX_COORD),
+						MemoryUtil.memGetFloat(third + TEX_COORD + 4L));
+			}
 
 			for (int corner = 0; corner < 4; corner++) {
 				copy(from, into, entity, blockEntity, item);

@@ -16,7 +16,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.RenderPipelines;
 
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import org.jspecify.annotations.Nullable;
 
@@ -151,14 +150,8 @@ public final class EntityMesh {
 	 */
 	private static boolean rebuildAsked;
 
-	/**
-	 * The readings of a pack's entity programs that stand, and how many of them declare
-	 * {@code at_tangent}. Counted rather than flagged because a reading is taken on the load worker
-	 * and released on the render thread, and two chains can stand at once while a load hands over.
-	 */
-	private static final AtomicInteger readings = new AtomicInteger();
-
-	private static final AtomicInteger tangentReadings = new AtomicInteger();
+	/** The readings of a pack's entity programs that stand, which {@link #tangentRead()} answers from. */
+	private static final TangentReadings TANGENTS = new TangentReadings();
 
 	private EntityMesh() {
 	}
@@ -188,29 +181,22 @@ public final class EntityMesh {
 	/**
 	 * Whether a tangent has to be worked out for the polygons written into this mesh and the
 	 * moving-block one: true until a pack's entity programs have been read, and after that only while
-	 * one of them declares {@code at_tangent}. Where none does, a polygon takes
-	 * {@code EntityFrame.FLAT}, the value a mesh carrying no tangent is read with, and nothing reads
-	 * it.
+	 * a program kept for a piece drawn from either declares {@code at_tangent}. Where none does, a
+	 * polygon takes {@code EntityFrame.FLAT}, the value a mesh carrying no tangent is read with, and
+	 * nothing reads it. {@code docs/internals/entities.md} says why.
 	 */
 	public static boolean tangentRead() {
-		return readings.get() == 0 || tangentReadings.get() > 0;
+		return TANGENTS.wanted();
 	}
 
-	/** One reading of a pack's entity programs came in, and whether any of them declares it. */
+	/** One reading of a pack's entity programs came in, and whether one it kept declares it. */
 	static void programsRead(boolean tangent) {
-		if (tangent) {
-			tangentReadings.incrementAndGet();
-		}
-
-		readings.incrementAndGet();
+		TANGENTS.read(tangent);
 	}
 
-	/** That reading's programs were released. */
+	/** The reading counted with that same answer was released. */
 	static void programsReleased(boolean tangent) {
-		readings.decrementAndGet();
-		if (tangent) {
-			tangentReadings.decrementAndGet();
-		}
+		TANGENTS.released(tangent);
 	}
 
 	/**

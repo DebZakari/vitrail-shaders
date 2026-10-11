@@ -356,6 +356,20 @@ public final class EntityDraw extends FamilyDraw {
 		}
 
 		/**
+		 * Whether this piece is drawn from one of the two meshes whose polygons the write roads give
+		 * a tangent, the entity one and the moving-block one, which is the question
+		 * {@link EntityMesh#tangentRead()} counts a reading by. Asked of {@link #format} rather than
+		 * of the pieces it leaves out, so a row that moves to another mesh moves out of the count
+		 * with it.
+		 */
+		@SuppressWarnings("ReferenceEquality")
+		boolean carriesTangent() {
+			VertexFormat format = format();
+
+			return format == EntityMesh.format() || format == EntityMesh.movingBlockFormat();
+		}
+
+		/**
 		 * The format this piece is drawn from, which is the entity mesh for every row but the glint's
 		 * four, the crumbling's one, the three moving-block rows, the three lines rows and the text's
 		 * eight.
@@ -1573,9 +1587,23 @@ public final class EntityDraw extends FamilyDraw {
 
 	/**
 	 * Whether a program kept for a piece drawn from the entity mesh or the moving-block one declares
-	 * {@code at_tangent}, which is what {@link EntityMesh#tangentRead()} counts this reading by.
+	 * {@code at_tangent}, which is what {@link EntityMesh#tangentRead()} counts this reading by. Set
+	 * before the program is kept, so a reading that throws halfway is counted by what it kept.
 	 */
 	private boolean tangentRead;
+
+	/**
+	 * Whether this reading is in that count, and whether the chain has been released. Both under this
+	 * draw's lock, because the reading is counted on the load worker and released on the render
+	 * thread, and the worker can reach {@link #read} after the release: it finishes a family it has
+	 * begun, and one that read its chain's flag just before the release begins this one after it. A
+	 * reading counted then would stand for the rest of the session, and every pack after it would
+	 * have the tangent worked out for nobody. So a released draw counts nothing, which loses no
+	 * reading: its chain is dropped with it and nothing reads or draws it again.
+	 */
+	private boolean counted;
+
+	private boolean released;
 
 	/** The reasons a draw has already been handed back to the game. One line each, not one a frame. */
 	private final Set<String> refused = new LinkedHashSet<>();
@@ -2302,9 +2330,15 @@ public final class EntityDraw extends FamilyDraw {
 		try {
 			readPrograms(shared);
 		} finally {
-			EntityMesh.programsRead(this.tangentRead);
-			Vitrail.logger().info("The entity programs of {} in {} {} at_tangent", this.packPath.getFileName(),
-					this.place.isEmpty() ? "its root" : this.place,
+			synchronized (this) {
+				if (!this.released && !this.counted) {
+					EntityMesh.programsRead(this.tangentRead);
+					this.counted = true;
+				}
+			}
+
+			Vitrail.logger().info("The entity programs of {} in {} {} at_tangent",
+					this.packPath.getFileName(), this.place.isEmpty() ? "its root" : this.place,
 					this.tangentRead ? "read" : "do not read");
 			this.read = true;
 		}
@@ -2531,9 +2565,10 @@ public final class EntityDraw extends FamilyDraw {
 				.filter(element -> loaded.containsKey(element.element()))
 				.forEach(element -> {
 					PackProgram.Loaded one = loaded.get(element.element());
-					// The glint, the text and the lines are drawn from meshes of their own, whose
-					// heads answer at_tangent with a constant: what they declare costs no polygon.
-					if (!element.glint() && !element.text() && !element.lines()
+					// Only the two meshes the write roads fill: the glint, the text, the lines and the
+					// crumbling are drawn from the game's own, whose heads answer at_tangent with a
+					// constant, so what they declare costs no polygon anything.
+					if (element.carriesTangent()
 							&& one.program().synthesized().containsKey("at_tangent")) {
 						this.tangentRead = true;
 					}
@@ -2733,11 +2768,17 @@ public final class EntityDraw extends FamilyDraw {
 		// would see the first reading's lines and nothing after them.
 		this.refused.clear();
 		this.droppedPipelines.clear();
-		if (this.read) {
-			EntityMesh.programsReleased(this.tangentRead);
+		// The answer it was counted with, which nothing moves once the reading is over.
+		synchronized (this) {
+			this.released = true;
+			if (this.counted) {
+				EntityMesh.programsReleased(this.tangentRead);
+				this.counted = false;
+			}
+
+			this.tangentRead = false;
 		}
 
-		this.tangentRead = false;
 		this.read = false;
 	}
 }

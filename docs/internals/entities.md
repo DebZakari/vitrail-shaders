@@ -219,6 +219,27 @@ of the picture inside out and nothing would say a word. The sprite's middle is t
 corners' texture coordinates, which each road works out as it walks them and which has nothing in it
 to get wrong.
 
+**A tangent no program reads is not worked out**, and the reference always works it out. It is most
+of what a polygon costs on either road: off the game, over cuboids of six faces, the serializer takes
+19.9 ns a quad and 13.8 of them are the tangent. A pack declares `at_tangent` only where it maps
+normals off a texture, and Complementary does not at its defaults: its generated normals and its
+resource-pack PBR are both off. So once a pack's entity programs are read, both roads ask whether a
+program kept for a piece drawn from this mesh or the moving-block one declares it, the translator
+listing the inputs each program declares off the lines its own `#if`s leave live. Where none does,
+every polygon takes the axis the prologue hands a mesh carrying no tangent. The sprite's middle is
+still worked out, and a moving block still has its face normal written back. On a field of 262 mobs
+under Complementary that is 0.12-0.16 ms less of the render thread a frame, with the picture
+unchanged.
+
+- **Until a reading stands the answer is yes**, so whatever is written before the first one carries
+  its tangent.
+- **Two readings can stand at once**, the chain a load replaces keeping its programs until it is
+  released, and one that reads the tangent is enough. A polygon written while the new chain's
+  reading lands may still be drawn by it within that frame, which is one frame at a pack load.
+- **The glint, the text, the lines and the crumbling do not count.** They are drawn from the game's
+  own meshes, whose heads answer `at_tangent` with a constant, so what they declare costs no polygon
+  anything.
+
 The two roads do part on one thing, and they part where the reference parts. On the chunk renderer's
 road the normal is left exactly as it was written, its cuboid writer having already put a face's own
 normal on all four corners, so there is nothing a quad could be asked that its corners do not agree
