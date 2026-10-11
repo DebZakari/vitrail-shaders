@@ -1571,6 +1571,12 @@ public final class EntityDraw extends FamilyDraw {
 	 * Volatile so the render thread sees it only after {@link #read} has filled the map. */
 	private volatile boolean read;
 
+	/**
+	 * Whether a program kept for a piece drawn from the entity mesh or the moving-block one declares
+	 * {@code at_tangent}, which is what {@link EntityMesh#tangentRead()} counts this reading by.
+	 */
+	private boolean tangentRead;
+
 	/** The reasons a draw has already been handed back to the game. One line each, not one a frame. */
 	private final Set<String> refused = new LinkedHashSet<>();
 
@@ -2296,6 +2302,10 @@ public final class EntityDraw extends FamilyDraw {
 		try {
 			readPrograms(shared);
 		} finally {
+			EntityMesh.programsRead(this.tangentRead);
+			Vitrail.logger().info("The entity programs of {} in {} {} at_tangent", this.packPath.getFileName(),
+					this.place.isEmpty() ? "its root" : this.place,
+					this.tangentRead ? "read" : "do not read");
 			this.read = true;
 		}
 	}
@@ -2519,11 +2529,20 @@ public final class EntityDraw extends FamilyDraw {
 
 		group.stream()
 				.filter(element -> loaded.containsKey(element.element()))
-				.forEach(element -> this.programs.put(element.element(), EntityProgram.of(
-						loaded.get(element.element()), element, this.values, this.load,
-						byFile.get(new Half(servedBy(loaded.get(element.element())),
-								element.afterStage(), element.shadow())),
-						this.chainTargets, this.targets, this.chainRuns)));
+				.forEach(element -> {
+					PackProgram.Loaded one = loaded.get(element.element());
+					// The glint, the text and the lines are drawn from meshes of their own, whose
+					// heads answer at_tangent with a constant: what they declare costs no polygon.
+					if (!element.glint() && !element.text() && !element.lines()
+							&& one.program().synthesized().containsKey("at_tangent")) {
+						this.tangentRead = true;
+					}
+
+					this.programs.put(element.element(), EntityProgram.of(one, element, this.values,
+							this.load, byFile.get(new Half(servedBy(one), element.afterStage(),
+									element.shadow())),
+							this.chainTargets, this.targets, this.chainRuns));
+				});
 	}
 
 	/**
@@ -2714,6 +2733,11 @@ public final class EntityDraw extends FamilyDraw {
 		// would see the first reading's lines and nothing after them.
 		this.refused.clear();
 		this.droppedPipelines.clear();
+		if (this.read) {
+			EntityMesh.programsReleased(this.tangentRead);
+		}
+
+		this.tangentRead = false;
 		this.read = false;
 	}
 }

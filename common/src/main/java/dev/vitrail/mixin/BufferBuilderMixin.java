@@ -5,6 +5,7 @@ import dev.vitrail.glsl.MovingBlockVertex;
 import dev.vitrail.mixin.access.ByteBufferBuilderAccessor;
 import dev.vitrail.render.EntityFrame;
 import dev.vitrail.render.EntityIdentifiers;
+import dev.vitrail.render.EntityMesh;
 
 import com.mojang.blaze3d.vertex.BufferBuilder;
 import com.mojang.blaze3d.vertex.ByteBufferBuilder;
@@ -297,10 +298,11 @@ public abstract class BufferBuilderMixin {
 			return;
 		}
 
+		boolean tangents = EntityMesh.tangentRead();
 		for (int at = 0; at < corners; at++) {
 			long vertex = base + corner[at];
 			int normal = MemoryUtil.memGetInt(vertex + this.vitrail$normal);
-			vitrail$write(vertex, midU, midV, EntityFrame.tangent(EntityFrame.unpack(normal, 0),
+			vitrail$write(vertex, midU, midV, !tangents ? EntityFrame.FLAT : EntityFrame.tangent(EntityFrame.unpack(normal, 0),
 					EntityFrame.unpack(normal, 1), EntityFrame.unpack(normal, 2), true,
 					read[0], read[1], read[2], read[3], read[4],
 					read[5], read[6], read[7], read[8], read[9],
@@ -355,6 +357,17 @@ public abstract class BufferBuilderMixin {
 	@Unique
 	private void vitrail$fillQuad(long base, long[] corner, float[] read, float[] face, float midU,
 			float midV) {
+		// No program reads the tangent: an entity quad has nothing else to work out, and a moving
+		// block's still writes its face normal back below.
+		boolean tangents = EntityMesh.tangentRead();
+		if (!tangents && this.vitrail$midBlock < 0) {
+			for (int at = 0; at < 4; at++) {
+				vitrail$write(base + corner[at], midU, midV, EntityFrame.FLAT);
+			}
+
+			return;
+		}
+
 		if (!EntityFrame.faceNormal(face, read[0], read[1], read[2], read[5], read[6], read[7],
 				read[10], read[11], read[12], read[15], read[16], read[17])) {
 			int given = MemoryUtil.memGetInt(base + corner[0] + this.vitrail$normal);
@@ -368,7 +381,7 @@ public abstract class BufferBuilderMixin {
 			}
 		}
 
-		int tangent = EntityFrame.tangent(face[0], face[1], face[2], false,
+		int tangent = !tangents ? EntityFrame.FLAT : EntityFrame.tangent(face[0], face[1], face[2], false,
 				read[0], read[1], read[2], read[3], read[4],
 				read[5], read[6], read[7], read[8], read[9],
 				read[10], read[11], read[12], read[13], read[14]);

@@ -133,6 +133,7 @@ public final class EntityMeshSerializer implements VertexSerializer {
 		short entity = (short) EntityIdentifiers.entity();
 		short blockEntity = (short) EntityIdentifiers.blockEntity();
 		short item = (short) EntityIdentifiers.item();
+		boolean tangents = EntityMesh.tangentRead();
 
 		int quads = vertices >> 2;
 		long from = written;
@@ -151,7 +152,7 @@ public final class EntityMeshSerializer implements VertexSerializer {
 					+ MemoryUtil.memGetFloat(second + TEX_COORD + 4L)
 					+ MemoryUtil.memGetFloat(third + TEX_COORD + 4L)
 					+ MemoryUtil.memGetFloat(fourth + TEX_COORD + 4L)) * 0.25F;
-			int tangent = EntityFrame.tangent(EntityFrame.unpack(normal, 0),
+			int tangent = !tangents ? EntityFrame.FLAT : EntityFrame.tangent(EntityFrame.unpack(normal, 0),
 					EntityFrame.unpack(normal, 1), EntityFrame.unpack(normal, 2), false,
 					MemoryUtil.memGetFloat(from + POSITION),
 					MemoryUtil.memGetFloat(from + POSITION + 4L),
