@@ -21,6 +21,14 @@ what the next one holds.
   the line says why, so the next press tries again. The key can be moved in the game's controls,
   under Vitrail, beside the two that open the settings and reload the pack.
 
+### Changed
+
+- **Mobs and block entities cost less to draw under any pack.** Every face of a mob, a block
+  entity or a held item is turned into Vitrail's vertex with the direction its texture runs in, and
+  that step now runs as three small methods the JIT can inline, with the vertex copied in words.
+  The output is bit for bit the same. On a field of 255 mobs under Complementary it takes
+  0.33-0.47 ms off every frame, and a field of mobs and chests runs 11-19% faster.
+
 ### Fixed
 
 - **Distant Horizons' own clouds stay out of a pack that asks for that.** With Distant Horizons
