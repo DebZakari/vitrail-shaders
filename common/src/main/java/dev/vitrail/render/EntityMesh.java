@@ -176,6 +176,20 @@ public final class EntityMesh {
 	}
 
 	/**
+	 * Whether a tangent has to be worked out for the polygons written into this mesh and the
+	 * moving-block one, which is the answer of the chain the frame draws from: true until its entity
+	 * programs have been read, and after that only while a program kept for a piece drawn from either
+	 * declares {@code at_tangent}. Where none does, a polygon takes {@code EntityFrame.FLAT}, the
+	 * value a mesh carrying no tangent is read with, and nothing reads it. True where no chain is
+	 * up. {@code docs/internals/entities.md} says why.
+	 */
+	public static boolean tangentRead() {
+		EntityDraw draw = PackChain.entities();
+
+		return draw == null || draw.tangentWanted();
+	}
+
+	/**
 	 * What a binding of {@code pipeline} declared as {@code declared} really is while the mesh
 	 * carries: this format wherever the game declares its own entity one, the moving-block format
 	 * wherever one of the game's three moving-block pipelines declares the block one, and

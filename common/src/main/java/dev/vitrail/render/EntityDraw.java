@@ -358,6 +358,20 @@ public final class EntityDraw extends FamilyDraw {
 		}
 
 		/**
+		 * Whether this piece is drawn from one of the two meshes whose polygons the write roads give
+		 * a tangent, the entity one and the moving-block one, which are the only programs
+		 * {@link EntityMesh#tangentRead()} asks after. Asked of {@link #format} rather than of the
+		 * pieces it leaves out, so a row that moves to another mesh moves out of the question with
+		 * it.
+		 */
+		@SuppressWarnings("ReferenceEquality")
+		boolean carriesTangent() {
+			VertexFormat format = format();
+
+			return format == EntityMesh.format() || format == EntityMesh.movingBlockFormat();
+		}
+
+		/**
 		 * The format this piece is drawn from, which is the entity mesh for every row but the glint's
 		 * four, the crumbling's one, the three moving-block rows, the three lines rows and the text's
 		 * eight.
@@ -1636,6 +1650,14 @@ public final class EntityDraw extends FamilyDraw {
 	 * Volatile so the render thread sees it only after {@link #read} has filled the map. */
 	private volatile boolean read;
 
+	/**
+	 * Whether a program kept for a piece drawn from the entity mesh or the moving-block one declares
+	 * {@code at_tangent}, which {@link #tangentWanted()} answers from. Written on the load worker
+	 * before {@link #read} is, so a thread that sees the one sees the other, and set before the
+	 * program is made, so one that fails to be made errs toward working the tangent out.
+	 */
+	private boolean tangentRead;
+
 	/** The reasons a draw has already been handed back to the game. One line each, not one a frame. */
 	private final Set<String> refused = new LinkedHashSet<>();
 
@@ -1717,6 +1739,15 @@ public final class EntityDraw extends FamilyDraw {
 		if (!this.read && (wanted() || HandDraw.wanted())) {
 			read(shared);
 		}
+	}
+
+	/**
+	 * Whether a polygon written for this chain's programs has to have its tangent worked out: yes
+	 * until they are read, which is also when they start drawing, and after that only where one of
+	 * them reads it. {@link EntityMesh#tangentRead()} asks the chain that is up and no other.
+	 */
+	boolean tangentWanted() {
+		return !this.read || this.tangentRead;
 	}
 
 	/**
@@ -2367,6 +2398,9 @@ public final class EntityDraw extends FamilyDraw {
 		try {
 			readPrograms(shared);
 		} finally {
+			Vitrail.logger().info("The entity programs of {} in {} {} at_tangent",
+					this.packPath.getFileName(), this.place.isEmpty() ? "its root" : this.place,
+					this.tangentRead ? "read" : "do not read");
 			this.read = true;
 		}
 	}
@@ -2601,11 +2635,21 @@ public final class EntityDraw extends FamilyDraw {
 
 		group.stream()
 				.filter(element -> loaded.containsKey(element.element()))
-				.forEach(element -> this.programs.put(element.element(), EntityProgram.of(
-						loaded.get(element.element()), element, this.values, this.load,
-						byFile.get(new Half(servedBy(loaded.get(element.element())),
-								element.afterStage(), element.shadow())),
-						this.chainTargets, this.targets, this.chainRuns)));
+				.forEach(element -> {
+					PackProgram.Loaded one = loaded.get(element.element());
+					// Only the two meshes the write roads fill: the glint, the text, the lines and the
+					// crumbling are drawn from the game's own, whose heads answer at_tangent with a
+					// constant, so what they declare costs no polygon anything.
+					if (element.carriesTangent()
+							&& one.program().synthesized().containsKey("at_tangent")) {
+						this.tangentRead = true;
+					}
+
+					this.programs.put(element.element(), EntityProgram.of(one, element, this.values,
+							this.load, byFile.get(new Half(servedBy(one), element.afterStage(),
+									element.shadow())),
+							this.chainTargets, this.targets, this.chainRuns));
+				});
 	}
 
 	/**
@@ -2796,6 +2840,7 @@ public final class EntityDraw extends FamilyDraw {
 		// would see the first reading's lines and nothing after them.
 		this.refused.clear();
 		this.droppedPipelines.clear();
+		this.tangentRead = false;
 		this.read = false;
 	}
 }

@@ -28,6 +28,11 @@ what the next one holds.
   that step now runs as three small methods the JIT can inline, with the vertex copied in words.
   The output is bit for bit the same. On a field of 255 mobs under Complementary it takes
   0.33-0.47 ms off every frame, and a field of mobs and chests runs 11-19% faster.
+- **Mobs cost less to draw under a pack that does not read their tangent.** Every face of a mob, a
+  block entity or a held item had the direction its texture runs in worked out as it was written,
+  for packs that map normals onto them. A pack whose programs never ask for it, Complementary at its
+  default settings among them, now has that step skipped, which on a field of 255 mobs takes
+  0.12-0.16 ms off every frame. A pack that does ask for it gets it as before.
 
 ### Fixed
 
