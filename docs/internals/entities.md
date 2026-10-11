@@ -374,21 +374,6 @@ blended by alpha. The crumbling multiplies instead, so left there it multiplies 
 and the cracks come out opaque black rather than darkening the face they lie on. Served, the multiply
 lands on the picture, which is where the game meant to put it.
 
-26.3 submits the cracks over an opaque block among the solid features instead, and keeps the
-breaking overlay phase for a translucent block's cracks; under its order independent transparency
-that phase is the order independent pass. The row is bound to the translucent features,
-since the crumbling blends, so on 26.3 those cracks went back to the game and the pack's image
-covered them: a block of stone or wood showed none while it was mined. While a pack draws, that
-transparency is off and `SubmitNodeCollectionCrumblingMixin` submits all of them to the breaking
-overlay phase again, which 26.3 executes where 26.2 did.
-
-Fabric Renderer API replaces LevelRenderer's vanilla block-breaking call with an overload carrying
-a `Mesh`. The vanilla correction alone is not reached on that path.
-`SubmitNodeCollectionFabricCrumblingMixin` changes only that overload's read of the solid phase
-while a pack draws, preserving its extended submission and mesh. Its priority permits injection
-into Renderer API's merged method, and its optional descriptor keeps installations without that
-API, including NeoForge, on the vanilla correction.
-
 **The block outline** is the third of those four, drawn from the lines format of the game's, and it
 is the one the full-screen layer could not carry at all rather than carry flat. The layer is composed
 onto the first target the pack's translucent pass writes, which is the scene colour for most packs

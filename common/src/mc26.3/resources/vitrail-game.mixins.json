@@ -19,8 +19,6 @@
 		"RenderSystemMixin",
 		"SkyRendererMixin",
 		"SPIRVModuleMixin",
-		"SubmitNodeCollectionCrumblingMixin",
-		"SubmitNodeCollectionFabricCrumblingMixin",
 		"VulkanRenderPipelineAccessor"
 	]
 }

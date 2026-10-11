@@ -1417,9 +1417,7 @@ public final class EntityDraw extends FamilyDraw {
 	 * layer is cleared to transparent black and composed as though every draw caught in it blended by
 	 * alpha. This pipeline multiplies instead, {@code DST_COLOR} by {@code SRC_COLOR}, so left there
 	 * it multiplies against the clear and every crack comes out black. Served, it multiplies onto the
-	 * colour the chain composed, which is where the game would have put it. 26.3 sends the cracks
-	 * over an opaque block to the solid features instead, where this row is not asked, and
-	 * {@code SubmitNodeCollectionCrumblingMixin} sends them back while a pack draws.
+	 * colour the chain composed, which is where the game would have put it.
 	 * <p>
 	 * <strong>It has no shadow twin here, and that is Iris's map rather than a divergence.</strong>
 	 * Iris holds a shadow key for this pipeline,
