@@ -147,8 +147,7 @@ public final class EntityMeshSerializer implements VertexSerializer {
 			long third = second + WRITTEN;
 			long fourth = third + WRITTEN;
 
-			int normal = MemoryUtil.memGetInt(from + NORMAL);
-			float midU = (MemoryUtil.memGetFloat(from + TEX_COORD)
+			float midU =(MemoryUtil.memGetFloat(from + TEX_COORD)
 					+ MemoryUtil.memGetFloat(second + TEX_COORD)
 					+ MemoryUtil.memGetFloat(third + TEX_COORD)
 					+ MemoryUtil.memGetFloat(fourth + TEX_COORD)) * 0.25F;
@@ -158,6 +157,7 @@ public final class EntityMeshSerializer implements VertexSerializer {
 					+ MemoryUtil.memGetFloat(fourth + TEX_COORD + 4L)) * 0.25F;
 			int tangent = EntityFrame.FLAT;
 			if (tangents) {
+				int normal = MemoryUtil.memGetInt(from + NORMAL);
 				tangent = EntityFrame.tangent(EntityFrame.unpack(normal, 0),
 						EntityFrame.unpack(normal, 1), EntityFrame.unpack(normal, 2), false,
 						MemoryUtil.memGetFloat(from + POSITION),

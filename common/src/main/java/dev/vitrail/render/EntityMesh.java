@@ -150,9 +150,6 @@ public final class EntityMesh {
 	 */
 	private static boolean rebuildAsked;
 
-	/** The readings of a pack's entity programs that stand, which {@link #tangentRead()} answers from. */
-	private static final TangentReadings TANGENTS = new TangentReadings();
-
 	private EntityMesh() {
 	}
 
@@ -180,23 +177,16 @@ public final class EntityMesh {
 
 	/**
 	 * Whether a tangent has to be worked out for the polygons written into this mesh and the
-	 * moving-block one: true until a pack's entity programs have been read, and after that only while
-	 * a program kept for a piece drawn from either declares {@code at_tangent}. Where none does, a
-	 * polygon takes {@code EntityFrame.FLAT}, the value a mesh carrying no tangent is read with, and
-	 * nothing reads it. {@code docs/internals/entities.md} says why.
+	 * moving-block one, which is the answer of the chain the frame draws from: true until its entity
+	 * programs have been read, and after that only while a program kept for a piece drawn from either
+	 * declares {@code at_tangent}. Where none does, a polygon takes {@code EntityFrame.FLAT}, the
+	 * value a mesh carrying no tangent is read with, and nothing reads it. True where no chain is
+	 * up. {@code docs/internals/entities.md} says why.
 	 */
 	public static boolean tangentRead() {
-		return TANGENTS.wanted();
-	}
+		EntityDraw draw = PackChain.entities();
 
-	/** One reading of a pack's entity programs came in, and whether one it kept declares it. */
-	static void programsRead(boolean tangent) {
-		TANGENTS.read(tangent);
-	}
-
-	/** The reading counted with that same answer was released. */
-	static void programsReleased(boolean tangent) {
-		TANGENTS.released(tangent);
+		return draw == null || draw.tangentWanted();
 	}
 
 	/**

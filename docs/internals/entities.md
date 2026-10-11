@@ -231,14 +231,15 @@ still worked out, and a moving block still has its face normal written back. On 
 under Complementary that is 0.12-0.16 ms less of the render thread a frame, with the picture
 unchanged.
 
-- **Until a reading stands the answer is yes**, so whatever is written before the first one carries
-  its tangent.
-- **Two readings can stand at once**, the chain a load replaces keeping its programs until it is
-  released, and one that reads the tangent is enough. A polygon written while the new chain's
-  reading lands may still be drawn by it within that frame, which is one frame at a pack load.
-- **The glint, the text, the lines and the crumbling do not count.** They are drawn from the game's
-  own meshes, whose heads answer `at_tangent` with a constant, so what they declare costs no polygon
-  anything.
+- **Only the chain the frame draws from answers.** A load takes the old chain down before it releases
+  it and puts the new one up after, and only the one up draws, so its programs are the only ones a
+  polygon can meet. Where none is up the answer is yes.
+- **Until its programs are read the answer is yes**, and they draw nothing before then: a polygon
+  written while they are being read carries its tangent, and one written after is drawn by the
+  programs that answered.
+- **The glint, the text, the lines and the crumbling are not asked after.** They are drawn from the
+  game's own meshes, whose heads answer `at_tangent` with a constant, so what they declare costs no
+  polygon anything.
 
 The two roads do part on one thing, and they part where the reference parts. On the chunk renderer's
 road the normal is left exactly as it was written, its cuboid writer having already put a face's own

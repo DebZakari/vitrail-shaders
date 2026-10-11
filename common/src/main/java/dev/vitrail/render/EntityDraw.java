@@ -357,10 +357,10 @@ public final class EntityDraw extends FamilyDraw {
 
 		/**
 		 * Whether this piece is drawn from one of the two meshes whose polygons the write roads give
-		 * a tangent, the entity one and the moving-block one, which is the question
-		 * {@link EntityMesh#tangentRead()} counts a reading by. Asked of {@link #format} rather than
-		 * of the pieces it leaves out, so a row that moves to another mesh moves out of the count
-		 * with it.
+		 * a tangent, the entity one and the moving-block one, which are the only programs
+		 * {@link EntityMesh#tangentRead()} asks after. Asked of {@link #format} rather than of the
+		 * pieces it leaves out, so a row that moves to another mesh moves out of the question with
+		 * it.
 		 */
 		@SuppressWarnings("ReferenceEquality")
 		boolean carriesTangent() {
@@ -1587,23 +1587,11 @@ public final class EntityDraw extends FamilyDraw {
 
 	/**
 	 * Whether a program kept for a piece drawn from the entity mesh or the moving-block one declares
-	 * {@code at_tangent}, which is what {@link EntityMesh#tangentRead()} counts this reading by. Set
-	 * before the program is kept, so a reading that throws halfway is counted by what it kept.
+	 * {@code at_tangent}, which {@link #tangentWanted()} answers from. Written on the load worker
+	 * before {@link #read} is, so a thread that sees the one sees the other, and set before the
+	 * program is made, so one that fails to be made errs toward working the tangent out.
 	 */
 	private boolean tangentRead;
-
-	/**
-	 * Whether this reading is in that count, and whether the chain has been released. Both under this
-	 * draw's lock, because the reading is counted on the load worker and released on the render
-	 * thread, and the worker can reach {@link #read} after the release: it finishes a family it has
-	 * begun, and one that read its chain's flag just before the release begins this one after it. A
-	 * reading counted then would stand for the rest of the session, and every pack after it would
-	 * have the tangent worked out for nobody. So a released draw counts nothing, which loses no
-	 * reading: its chain is dropped with it and nothing reads or draws it again.
-	 */
-	private boolean counted;
-
-	private boolean released;
 
 	/** The reasons a draw has already been handed back to the game. One line each, not one a frame. */
 	private final Set<String> refused = new LinkedHashSet<>();
@@ -1686,6 +1674,15 @@ public final class EntityDraw extends FamilyDraw {
 		if (!this.read && (wanted() || HandDraw.wanted())) {
 			read(shared);
 		}
+	}
+
+	/**
+	 * Whether a polygon written for this chain's programs has to have its tangent worked out: yes
+	 * until they are read, which is also when they start drawing, and after that only where one of
+	 * them reads it. {@link EntityMesh#tangentRead()} asks the chain that is up and no other.
+	 */
+	boolean tangentWanted() {
+		return !this.read || this.tangentRead;
 	}
 
 	/**
@@ -2330,13 +2327,6 @@ public final class EntityDraw extends FamilyDraw {
 		try {
 			readPrograms(shared);
 		} finally {
-			synchronized (this) {
-				if (!this.released && !this.counted) {
-					EntityMesh.programsRead(this.tangentRead);
-					this.counted = true;
-				}
-			}
-
 			Vitrail.logger().info("The entity programs of {} in {} {} at_tangent",
 					this.packPath.getFileName(), this.place.isEmpty() ? "its root" : this.place,
 					this.tangentRead ? "read" : "do not read");
@@ -2768,17 +2758,7 @@ public final class EntityDraw extends FamilyDraw {
 		// would see the first reading's lines and nothing after them.
 		this.refused.clear();
 		this.droppedPipelines.clear();
-		// The answer it was counted with, which nothing moves once the reading is over.
-		synchronized (this) {
-			this.released = true;
-			if (this.counted) {
-				EntityMesh.programsReleased(this.tangentRead);
-				this.counted = false;
-			}
-
-			this.tangentRead = false;
-		}
-
+		this.tangentRead = false;
 		this.read = false;
 	}
 }
