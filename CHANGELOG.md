@@ -11,6 +11,12 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- Player names remain visible through terrain with shaders enabled on Minecraft 26.3.
+
 ## 0.12.0-beta.vultrum.2
 
 A build of 0.12.0-beta made for [Vultrum](https://github.com/DebZakari/Vultrum), not a release of
