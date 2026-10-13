@@ -11,6 +11,29 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## 0.13.0-beta.vultrum.1
+
+A build of 0.13.0-beta made for [Vultrum](https://github.com/DebZakari/Vultrum), not a release of
+Vitrail's own. It is the build Vultrum is tested with: everything in 0.13.0-beta, and the speedups
+of the 0.12.0-beta.vultrum builds. Report its bugs to Vultrum's issues, not to Vitrail's.
+
+### Changed
+
+- **Mobs and block entities cost less to draw under any pack.** Every face of a mob, a block
+  entity or a held item is turned into Vitrail's vertex with the direction its texture runs in, and
+  that step now runs as three small methods the JIT can inline, with the vertex copied in words.
+  The output is bit for bit the same. On a field of 255 mobs under Complementary it takes
+  0.33-0.47 ms off every frame, and a field of mobs and chests runs 11-19% faster.
+- **Colour mip chains are filled by compute on NVIDIA.** A pack that asks for mipmaps on a colour
+  target had each level drawn as a render pass of its own. On an NVIDIA GPU a few compute
+  dispatches now fill the whole chain, which takes 0.05-0.09 ms off a frame under Complementary.
+  Other GPUs keep the render passes until they are measured.
+- **Mobs cost less to draw under a pack that does not read their tangent.** Every face of a mob, a
+  block entity or a held item had the direction its texture runs in worked out as it was written,
+  for packs that map normals onto them. A pack whose programs never ask for it, Complementary at its
+  default settings among them, now has that step skipped, which on a field of 255 mobs takes
+  0.12-0.16 ms off every frame. A pack that does ask for it gets it as before.
+
 ## 0.13.0-beta
 
 ### Added
@@ -20,19 +43,6 @@ what the next one holds.
   because it fails to load, is no longer in the folder or none was picked, shaders stay off and
   the line says why, so the next press tries again. The key can be moved in the game's controls,
   under Vitrail, beside the two that open the settings and reload the pack.
-
-### Changed
-
-- **Mobs and block entities cost less to draw under any pack.** Every face of a mob, a block
-  entity or a held item is turned into Vitrail's vertex with the direction its texture runs in, and
-  that step now runs as three small methods the JIT can inline, with the vertex copied in words.
-  The output is bit for bit the same. On a field of 255 mobs under Complementary it takes
-  0.33-0.47 ms off every frame, and a field of mobs and chests runs 11-19% faster.
-- **Mobs cost less to draw under a pack that does not read their tangent.** Every face of a mob, a
-  block entity or a held item had the direction its texture runs in worked out as it was written,
-  for packs that map normals onto them. A pack whose programs never ask for it, Complementary at its
-  default settings among them, now has that step skipped, which on a field of 255 mobs takes
-  0.12-0.16 ms off every frame. A pack that does ask for it gets it as before.
 
 ### Fixed
 
