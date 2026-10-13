@@ -581,10 +581,13 @@ record Emitter(ProgramStage stage, VertexInputs inputs, List<String> bound, Alph
 	 * - and reading a builtin the stage never wrote is undefined, so the mask would carry whatever
 	 * the driver left there. Writing it costs the early depth test, which is why a stage that never
 	 * names it is left alone: it would pay that for a value the line below can read off
-	 * {@code gl_FragCoord} instead.
+	 * {@code gl_FragCoord} instead. Nor is a piece of the sky given it: its mask takes
+	 * {@link #FAR_PLANE} and reads no depth at all.
 	 */
 	private String coveragePrologue() {
-		return this.covers && this.namesFragDepth ? "gl_FragDepth = gl_FragCoord.z; " : "";
+		return this.covers && this.namesFragDepth && this.inputs != VertexInputs.SKY
+				? "gl_FragDepth = gl_FragCoord.z; "
+				: "";
 	}
 
 	/**
