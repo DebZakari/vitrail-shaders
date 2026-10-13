@@ -209,7 +209,8 @@ program takes a different one, with a fault of its own described in
 **A pixel the pack's own geometry has covered must not be seeded over.** That is what the coverage
 mask is for, and it carries a **depth** rather than a flag: a program of the pack drawn before the
 seed writes into it the value it handed the depth attachment, and the seed compares that with
-the world's depth as it stands. A pixel nothing has been drawn over since compares equal and is the
+the world's depth as it stands. The sky is the one exception: it hands the attachment nothing, so
+it writes the far plane, which is what the attachment still holds under it. A pixel nothing has been drawn over since compares equal and is the
 pack's; a pixel the game has drawn a feature onto compares closer and is the seed's. Where the pack
 wrote nothing at all the mask holds a value outside zero to one, which every real depth is in front
 of, so those pixels take the game's picture through the same comparison.

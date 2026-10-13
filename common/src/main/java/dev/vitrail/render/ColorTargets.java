@@ -98,7 +98,8 @@ final class ColorTargets {
 	 * <p>
 	 * A float and nothing narrower because the comparison is for equality as much as for order. The
 	 * game's depth attachment is {@code D32_FLOAT} ({@code RenderTarget.createBuffers}), the mask is
-	 * filled from the very value the fragment stage hands that attachment, and both sides then carry
+	 * filled from the very value the fragment stage hands that attachment (the sky, which hands it
+	 * none, writes the clear it stands over), and both sides then carry
 	 * the same thirty two bits: a pixel nothing has been drawn over compares exactly equal. Rounded
 	 * into a narrower format it would not, and the seed would repaint the pack's own geometry
 	 * wherever the rounding fell the wrong way.

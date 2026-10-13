@@ -46,7 +46,8 @@ import java.util.Optional;
  * <p>
  * <strong>The cut is one comparison, and it is the mask against the world's depth as it stands.</strong>
  * The mask carries a depth and not a flag: what a program of the pack wrote into the depth
- * attachment, at the moment it wrote it. So a pixel nothing has been drawn over since compares
+ * attachment, at the moment it wrote it, and the far plane under a piece of the sky, which writes
+ * that attachment nothing. So a pixel nothing has been drawn over since compares
  * equal and is the pack's, and a pixel the game drew a feature onto compares closer and is the
  * game's to paint after all. That second case is the one a flag could not answer, and what it is
  * made of is every piece the game still draws for itself in front of a block: a beacon beam, a
@@ -208,9 +209,9 @@ final class SceneSeed {
 	 * front of the depth the pack's geometry left, except where the far terrain owns the pixel.
 	 * <p>
 	 * Neither side of the first comparison is converted into the pack's window. The mask is filled
-	 * by the fragment stage from the value it hands the depth attachment, and this reads that
-	 * attachment back, so the two are the same number written by the same draw, however the game
-	 * encodes its depth, to within the few units in the last place {@link #SLACK_EPSILONS} is about.
+	 * by the fragment stage from the value it hands the depth attachment, or from the attachment's
+	 * own clear under the sky, and this reads that attachment back, so the two are the same number
+	 * however the game encodes its depth, to within the few units in the last place {@link #SLACK_EPSILONS} is about.
 	 * <p>
 	 * <strong>The far terrain's depth is a third image and cannot enter that comparison</strong>:
 	 * it is rasterised in DH's own volume, whose near plane stands blocks out, so its numbers and
