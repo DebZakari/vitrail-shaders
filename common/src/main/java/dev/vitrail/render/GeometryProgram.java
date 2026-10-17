@@ -715,7 +715,7 @@ final class GeometryProgram {
 
 		ChunkFadeCompat.Patch chunkFade = ChunkFadeCompat.prepare(pass, loaded);
 		String originalVertex = loaded.program().stages().get(ProgramStage.VERTEX).text();
-		String vertex = chunkFade == null ? originalVertex : chunkFade.vertex(originalVertex);
+		String vertex = chunkFade == null ? originalVertex : chunkFade.vertex();
 		// The pass is in the name and not only the path, because two passes are usually served by
 		// the same file and their text still differs: the cutout half carries a discard the solid
 		// half does not. The device caches a shader module under its identifier, so one name for two
@@ -832,7 +832,7 @@ final class GeometryProgram {
 		// which is also why the source is only built once the pipeline exists.
 		String originalFragment = GeometryStage.fragment(this.pipeline, this.path, loaded);
 		String fragment = chunkFade == null || originalFragment == null
-				? originalFragment : chunkFade.fragment(originalFragment);
+				? originalFragment : chunkFade.fragment();
 		if (fragment == null) {
 			this.broken = true;
 		}

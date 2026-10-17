@@ -17,8 +17,9 @@ what the next one holds.
 
 - **Experimental Chunks Fade In support on Minecraft 26.3.** Terrain can fade and
   animate while shaders are enabled. Checked with CFI 3.0.29 and Complementary
-  Unbound r5.9.3. Press `R` after changing CFI's animation or shader-patch settings;
-  other packs and CFI's pack API are not covered by this first bridge.
+  Unbound r5.9.3. Pack programs rebuild when CFI requests a shader update. The
+  bridge respects pack opt-outs and preserves alpha when fading supported packed
+  colours. CFI's pack API, geometry stages and curvature remain unsupported.
 
 ### Fixed
 

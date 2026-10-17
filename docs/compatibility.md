@@ -182,17 +182,28 @@ being how to read it.
 
 ## Chunks Fade In
 
-The experimental bridge on Minecraft 26.3 restores Chunks Fade In's terrain fade and
-motion with a shader pack enabled. The checked combination is CFI 3.0.29, Sodium
-0.9.2 and Complementary Unbound r5.9.3, with the mod's shader-patch options enabled.
-Fade alone, motion alone, both together, chunk streaming and pack reload were checked.
+The experimental bridge on Minecraft 26.3 connects Chunks Fade In's terrain fade
+and movement to shader-pack terrain programs. It currently accepts CFI
+`3.0.29-26.3` with Sodium `0.9.2+mc26.3` or `0.9.3-beta.1+mc26.3`; other versions leave pack shaders
+unchanged and log a warning. The bridge is inactive on Minecraft 26.2.
 
-After changing CFI's fade type, animation mode or shader-patch switches, press `R`
-to reload Vitrail's pack programs. This prototype does not yet follow CFI's own
-shader invalidation automatically. Other packs, packed colour outputs, CFI's pack
-API, geometry stages and world curvature have no compatibility claim from this
-check. The bridge is inactive on Minecraft 26.2. Its mechanism and boundaries are
-in [terrain](internals/terrain.md#experimental-chunks-fade-in-bridge).
+The initial bridge was checked in-game with Complementary Unbound r5.9.3: fade
+alone, movement alone, both together, streaming, pack reload and CFI absence.
+The completion changes add automatic rebuilding when CFI requests a shader update,
+live pack opt-outs, scalar/vector outputs and a restricted set of packed colours.
+Those additions have unit and shader-compilation checks; their live lifecycle and
+image checks are still pending on this draft.
+
+The first colour output is faded. Supported packed forms use GLSL's built-in
+Unorm/Snorm or half-float packing with a directly named colour vector. Temporary
+copies preserve its alpha and leave the pack's original variable untouched.
+Custom encoding, uncertain control flow and unsupported types leave that program
+unchanged with a warning rather than fading encoded material data.
+
+CFI's shader-pack API, geometry stages and world curvature remain unsupported.
+No CFI capability define is advertised to select a pack's API-specific branch.
+The mechanism and remaining checks are in
+[terrain](internals/terrain.md#experimental-chunks-fade-in-bridge).
 
 ## The effect never ran
 
