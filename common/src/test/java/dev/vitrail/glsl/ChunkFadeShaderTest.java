@@ -194,4 +194,46 @@ class ChunkFadeShaderTest {
 				+ "target.x=packUnorm2x16(color.rg); }\n"));
 	}
 
+	@Test
+	void refusesEncodedFloatingOutputsPassedThroughLocals() {
+		for (String conversion : java.util.List.of("uintBitsToFloat", "intBitsToFloat")) {
+			String type = conversion.startsWith("uint") ? "uint" : "int";
+			String packed = type + "(packUnorm2x16(color.rg))";
+			for (String output : java.util.List.of("float", "vec2", "vec3", "vec4")) {
+				String prefix = "#version 460\nlayout(location=0) out " + output + " target;\n"
+						+ "void main(){vec3 color=vec3(0.5);" + type + " encoded=" + packed + ";";
+				assertThrows(IllegalArgumentException.class, () -> fade(prefix
+						+ "target=" + output + "(" + conversion + "(encoded));}\n"));
+				assertThrows(IllegalArgumentException.class, () -> fade(prefix
+						+ "float bits=" + conversion + "(encoded);target=" + output + "(bits);}\n"));
+			}
+		}
+	}
+
+	@Test
+	void refusesEncodedFloatingOutputsReturnedByAHelper() {
+		assertThrows(IllegalArgumentException.class, () -> fade("#version 460\n"
+				+ "layout(location=0)out vec4 target;\n"
+				+ "float encode(vec2 color){return uintBitsToFloat(packUnorm2x16(color));}\n"
+				+ "void main(){target=vec4(encode(vec2(0.5)));}\n"));
+	}
+
+	@Test
+	void preservesSupportedInlinePackingIntoFloatingOutputs() {
+		String result = fade("#version 460\nlayout(location=0)out vec4 target;\n"
+				+ "void main(){vec3 color=vec3(0.5);target.x=uintBitsToFloat(packUnorm2x16(color.rg));}\n");
+		assertTrue(result.contains("vec3 ofCfiPacked0 = color;"));
+		assertTrue(result.contains("FADE(ofCfiPacked0.rgb, sky.rgb)"));
+		assertTrue(result.contains("uintBitsToFloat(packUnorm2x16(ofCfiPacked0.rg))"));
+		assertFalse(result.contains("FADE(target"));
+	}
+
+	@Test
+	void ignoresBitcastNamesInCommentsAndLongerIdentifiers() {
+		String result = fade("#version 460\nlayout(location=0)out vec4 target;\n"
+				+ "// uintBitsToFloat(encoded); intBitsToFloat(encoded);\n"
+				+ "void main(){float uintBitsToFloatWeight=0.5;target=vec4(uintBitsToFloatWeight);}\n");
+		assertTrue(result.contains("FADE(target.rgb, sky.rgb)"));
+	}
+
 }

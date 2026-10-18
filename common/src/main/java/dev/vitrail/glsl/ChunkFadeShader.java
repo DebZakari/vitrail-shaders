@@ -229,6 +229,13 @@ public final class ChunkFadeShader {
 			suffixes.forEach((at, text) -> tokens.inject(at, tokens.get(at).text() + text));
 			return header(tokens.join(), declarations);
 		}
+		// Locals or helper returns can carry encoded bits into a floating output. Without an
+		// inline packing assignment, treating that output as a colour would corrupt the payload.
+		for (GlslLexer.Token token : tokens) {
+			if (token.identifier("uintBitsToFloat") || token.identifier("intBitsToFloat")) {
+				throw new IllegalArgumentException("Unresolved integer bitcast in floating colour output");
+			}
+		}
 		String tail = switch (output.type()) {
 			case "float" -> scalarOperation.replace("ofCfiColour", output.name());
 			case "vec2" -> operation.apply(output.name(), "rg");

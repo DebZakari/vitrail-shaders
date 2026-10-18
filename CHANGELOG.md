@@ -19,7 +19,8 @@ what the next one holds.
   animate while shaders are enabled. Checked with CFI 3.0.29 and Complementary
   Unbound r5.9.3. Pack programs rebuild when CFI requests a shader update. The
   bridge respects pack opt-outs and preserves alpha when fading supported packed
-  colours. CFI's pack API, geometry stages and curvature remain unsupported.
+  colours. Unresolved integer bitcasts leave the pack's shaders unchanged. CFI's
+  pack API, geometry stages and curvature remain unsupported.
 
 ### Fixed
 

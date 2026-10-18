@@ -457,6 +457,11 @@ Only its RGB channels change; alpha and the original variable remain available t
 the pack. Custom packing, indexed/compound writes and unbraced conditional packing
 are refused. The bridge prepares both stages before allocating a pipeline, so an
 unsupported transformation leaves the original pair and bindings unchanged.
+The ordinary floating-output fallback is refused when the fragment contains an
+integer-to-float bitcast without a recognized inline packing assignment. A local
+variable, helper return or macro can carry encoded bits to the output, so the
+presence of such a bitcast is enough: this bridge does not follow its data flow.
+The refusal is conservative, including when the bitcast serves another target.
 Generated declarations follow the hoisted extension directives.
 
 The translator retains live CFI opt-out defines as marker declarations. This

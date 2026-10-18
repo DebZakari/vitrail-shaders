@@ -208,7 +208,8 @@ The first colour output is faded. Supported packed forms use GLSL's built-in
 Unorm/Snorm or half-float packing with a directly named colour vector. Temporary
 copies preserve its alpha and leave the pack's original variable untouched.
 Custom encoding, uncertain control flow and unsupported types leave that program
-unchanged with a warning rather than fading encoded material data.
+unchanged with a warning rather than fading encoded material data. Integer-to-float
+bitcasts without a recognized inline packing assignment also skip the CFI patch.
 
 CFI's shader-pack API, geometry stages and world curvature remain unsupported.
 No CFI capability define is advertised to select a pack's API-specific branch.
