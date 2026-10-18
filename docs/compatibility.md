@@ -184,15 +184,25 @@ being how to read it.
 
 The experimental bridge on Minecraft 26.3 connects Chunks Fade In's terrain fade
 and movement to shader-pack terrain programs. It currently accepts CFI
-`3.0.29-26.3` with Sodium `0.9.2+mc26.3` or `0.9.3-beta.1+mc26.3`; other versions leave pack shaders
-unchanged and log a warning. The bridge is inactive on Minecraft 26.2.
+`3.0.29-26.3` with Sodium `0.9.2+mc26.3` or `0.9.3-beta.1+mc26.3`; other versions
+leave pack shaders unchanged and log a warning. The bridge is inactive on Minecraft 26.2.
 
-The initial bridge was checked in-game with Complementary Unbound r5.9.3: fade
-alone, movement alone, both together, streaming, pack reload and CFI absence.
-The completion changes add automatic rebuilding when CFI requests a shader update,
-live pack opt-outs, scalar/vector outputs and a restricted set of packed colours.
-Those additions have unit and shader-compilation checks; their live lifecycle and
-image checks are still pending on this draft.
+With Complementary Unbound r5.9.3 and Sodium 0.9.2, the live checks include fade
+and movement, streaming, pack reload, disable/re-enable, render-distance changes
+and leaving/rejoining the world. Changing CFI's settings rebuilds pack programs
+automatically; changing lined/linear fading to block/Oklab was checked through
+CFI's own settings screen.
+
+Separate checks on Sodium 0.9.3-beta.1 cover fade and movement, shadows, water,
+underwater rendering and toggling CFI. The committed build also renders and
+reloads with CFI absent on that beta.
+
+Settled shadows from opaque and cutout blocks, the water surface and underwater
+vegetation were checked with CFI enabled and disabled. Matched views with Iris
+1.11.7 on the same Sodium beta, CFI configuration and pack settings look close
+once settled, and both renderers show the fade and movement. The comparison does
+not establish pixel-exact transition parity: section ages were not synchronized.
+Other packs have no live compatibility claim from these checks.
 
 The first colour output is faded. Supported packed forms use GLSL's built-in
 Unorm/Snorm or half-float packing with a directly named colour vector. Temporary

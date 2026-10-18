@@ -440,8 +440,9 @@ through solid blocks: a lighting bug in appearance, a matrix bug in fact.
 ## Experimental Chunks Fade In bridge
 
 On Minecraft 26.3, `ChunkFadeCompat` obtains code from the installed CFI
-`3.0.29-26.3` shader generator. Sodium `0.9.2+mc26.3` or `0.9.3-beta.1+mc26.3` is also checked before
-using its named resource contract. Other versions leave pack programs unchanged.
+`3.0.29-26.3` shader generator. Sodium `0.9.2+mc26.3` or
+`0.9.3-beta.1+mc26.3` is also checked before using its named resource contract.
+Other versions leave pack programs unchanged.
 The shared translator stays independent of Minecraft and the optional mod.
 
 `ChunkFadeShader` inserts the generated vertex initialisation after decoding the
@@ -474,8 +475,16 @@ When CFI advances it, `PackChoice` uses its normal teardown/reload before the le
 is rendered and settles the revision with the new load. There is no file watcher
 or extra thread. The bridge is inactive on 26.2.
 
-The initial Complementary fade/movement path has live checks. The completion adds
-unit regressions and standalone compilation across CFI modes and all six
-Complementary terrain/shadow programs. Automatic reload, disable/re-enable,
-underwater/shadow images, rejoin, render-distance changes and a matched Iris view
-still need live acceptance before the draft is ready.
+The bridge has unit regressions and standalone compilation across CFI modes and
+all six Complementary terrain/shadow programs. Live checks on the committed build
+cover CFI's settings screen, disable/re-enable, pack reload, leaving/rejoining the
+world and changing render distance from 12 to 22. The automatic reload was observed
+without pressing Vitrail's reload key.
+
+The image checks use a stone platform with an oak trunk and a cutout canopy, the
+surrounding water and an underwater view. The settled image was compared with CFI
+enabled and disabled. Iris 1.11.7 was also checked on the same Sodium beta, CFI
+configuration, pack settings and camera positions. Both renderers show fade and
+movement, and their settled views look close; the samples do not align section
+ages, so they cannot establish pixel-exact transition parity. The checks cover
+Complementary Unbound r5.9.3, not a broader pack corpus, and establish no FPS gain.
