@@ -11,6 +11,14 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- Mipmapped colour targets use their base level for drawing and clearing, while shader sampling
+  keeps the complete mip chain. This fixes invalid Vulkan render attachments during pack loading
+  and rendering.
+
 ## 0.13.0-beta.vultrum.1
 
 A build of 0.13.0-beta made for [Vultrum](https://github.com/DebZakari/Vultrum), not a release of

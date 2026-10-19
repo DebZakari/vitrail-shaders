@@ -739,7 +739,8 @@ final class ColorTargets {
 
 		Vector4fc colour = this.pendingClears.remove(texture);
 		if (colour != null) {
-			into.add(new Pending(surface.view(), colour));
+			// A clear writes level zero; the sampling view may expose the full mip chain.
+			into.add(new Pending(surface.storageView(), colour));
 		}
 	}
 
@@ -862,6 +863,13 @@ final class ColorTargets {
 		TargetSurface surface = target(index, side);
 
 		return surface == null ? null : surface.view();
+	}
+
+	/** Level zero alone for rendering; samplers keep the complete chain through {@link #view}. */
+	GpuTextureView attachmentView(int index, TargetSchedule.Side side) {
+		TargetSurface surface = target(index, side);
+
+		return surface == null ? null : surface.storageView();
 	}
 
 	GpuTexture texture(int index, TargetSchedule.Side side) {

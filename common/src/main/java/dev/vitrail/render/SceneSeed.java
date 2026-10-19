@@ -484,7 +484,7 @@ final class SceneSeed {
 	boolean draw(CommandEncoder encoder, GpuBuffer quad, GpuTextureView scene,
 			GpuTextureView covered, GpuTextureView live, GpuTextureView distant,
 			ColorTargets targets) {
-		GpuTextureView into = targets.view(this.seed.target(), this.seed.side());
+		GpuTextureView into = targets.attachmentView(this.seed.target(), this.seed.side());
 		if (quad == null || scene == null || covered == null || live == null || distant == null
 				|| into == null) {
 			return false;
@@ -530,7 +530,7 @@ final class SceneSeed {
 		int width = 0;
 		int height = 0;
 		for (Extra extra : this.extras) {
-			GpuTextureView view = targets.view(extra.target(), extra.side());
+			GpuTextureView view = targets.attachmentView(extra.target(), extra.side());
 			if (view == null) {
 				return false;
 			}

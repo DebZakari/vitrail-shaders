@@ -1768,7 +1768,7 @@ final class GeometryProgram {
 	private GpuTextureView view(Slot slot, GpuTextureView colour) {
 		return switch (slot.bound()) {
 			case GAME -> colour;
-			case PACK -> this.targets.view(slot.target().target(), slot.target().side());
+			case PACK -> this.targets.attachmentView(slot.target().target(), slot.target().side());
 			case COVERAGE -> this.targets.coverage();
 			case UNUSED -> null;
 		};

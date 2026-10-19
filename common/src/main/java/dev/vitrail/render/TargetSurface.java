@@ -52,7 +52,7 @@ final class TargetSurface implements AutoCloseable {
 	private GpuTextureView view;
 
 	/**
-	 * The base level alone, for a storage descriptor. Null for a surface with no chain, where
+	 * The base level alone, for storage descriptors and render attachments. Null without a chain, where
 	 * {@link #view} is one level already.
 	 */
 	private GpuTextureView baseView;
@@ -164,8 +164,8 @@ final class TargetSurface implements AutoCloseable {
 	}
 
 	/**
-	 * The base level alone, which is what a storage descriptor takes: Vulkan binds an image view of
-	 * exactly one level there, and a pack program writes level nought. The same object as {@link #view}
+	 * The base level alone for storage descriptors and render attachments: Vulkan requires one level
+	 * in either role, and a pack program writes level nought. The same object as {@link #view}
 	 * on a surface with no chain, where the whole view is one level already.
 	 */
 	GpuTextureView storageView() {

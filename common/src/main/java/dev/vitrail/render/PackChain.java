@@ -2122,7 +2122,7 @@ public final class PackChain {
 
 		try {
 			ChainPlan.Attachment into = chain.features.into();
-			GpuTextureView view = chain.targets.view(into.target(), into.side());
+			GpuTextureView view = chain.targets.attachmentView(into.target(), into.side());
 			// This pass may be the frame's first to attach that target, so it takes the emptying
 			// still owed, the way every attaching pass does: composed onto a debt left standing,
 			// the layer would sit on stale texels and be erased with them at the deferred flush.

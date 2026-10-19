@@ -917,7 +917,7 @@ final class PackPass {
 	}
 
 	private GpuTextureView view(ColorTargets targets, ChainPlan.Attachment attachment) {
-		GpuTextureView view = targets.view(attachment.target(), attachment.side());
+		GpuTextureView view = targets.attachmentView(attachment.target(), attachment.side());
 		if (view == null) {
 			// Named rather than let through: a null attachment reaches the encoder as an assertion
 			// or a null pointer, neither of which says which program wrote which target.
