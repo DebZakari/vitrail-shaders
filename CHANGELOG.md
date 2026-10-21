@@ -11,6 +11,13 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- Custom emissive entity overlays keep their shader rendering when drawn with an opaque model,
+  preventing missing or flickering glowing textures with Entity Texture Features.
+
 ## 0.13.0-beta.vultrum.2
 
 A build of 0.13.0-beta made for [Vultrum](https://github.com/DebZakari/Vultrum), under Vitrail's
