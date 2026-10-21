@@ -11,6 +11,13 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- Wakes Reforged can detect the active shader pack on Minecraft 26.3, and its wake trails render
+  after water instead of disappearing beneath the shader's final image.
+
 ## 0.13.0-beta.vultrum.3
 
 A build of 0.13.0-beta made for [Vultrum](https://github.com/DebZakari/Vultrum), under Vitrail's
