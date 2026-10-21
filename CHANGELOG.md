@@ -11,7 +11,11 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
-## Unreleased
+## 0.13.0-beta.vultrum.3
+
+A build of 0.13.0-beta made for [Vultrum](https://github.com/DebZakari/Vultrum), under Vitrail's
+LGPL 3.0 licence. It retains the previous build's optimizations and mipmapped target fix.
+Report its bugs to Vultrum's issues, not to Vitrail's.
 
 ### Fixed
 
