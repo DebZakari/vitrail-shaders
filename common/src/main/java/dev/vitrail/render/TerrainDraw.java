@@ -100,6 +100,13 @@ public final class TerrainDraw {
 	private static boolean shadowing;
 
 	/**
+	 * Whether the pipeline the chunk renderer bound for the pass it is drawing is one of ours, as
+	 * {@link #bind} last found. Set at every bind, ours or not, so it never outlives the pass it was
+	 * read for; render thread only, like the bind itself.
+	 */
+	private static boolean boundOurs;
+
+	/**
 	 * What the chunk mesh has to carry for the pack in force: Sodium's own elements first, then the
 	 * ones this engine appends that the pack's chunk programs really read. Empty where no pack's
 	 * terrain program is wanted, and then the mesh keeps Sodium's own format.
@@ -917,6 +924,7 @@ public final class TerrainDraw {
 	 * knowing which of the two was drawing.
 	 */
 	public static void bind(RenderPass pass, RenderPipeline bound) {
+		boundOurs = false;
 		TerrainDraw draw = PackChain.terrain();
 		if (draw == null) {
 			return;
@@ -924,8 +932,17 @@ public final class TerrainDraw {
 
 		TerrainProgram program = draw.owner(bound);
 		if (program != null) {
+			boundOurs = true;
 			program.bind(pass);
 		}
+	}
+
+	/**
+	 * Whether the chunk pass being drawn runs one of our programs, which is what decides whose
+	 * reading of the push constants applies to it.
+	 */
+	public static boolean boundOurs() {
+		return boundOurs;
 	}
 
 	/**

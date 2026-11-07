@@ -8,8 +8,10 @@ import dev.vitrail.render.timing.RingTimings;
 import dev.vitrail.sodium.SodiumApi;
 import dev.vitrail.sodium.SodiumPasses;
 
+import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.renderpearl.api.buffers.GpuBuffer;
@@ -21,6 +23,7 @@ import net.caffeinemc.mods.sodium.client.gui.SodiumOptions;
 import net.caffeinemc.mods.sodium.client.render.chunk.ChunkRenderMatrices;
 import net.caffeinemc.mods.sodium.client.render.chunk.DefaultChunkRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.lists.ChunkRenderListIterable;
+import net.caffeinemc.mods.sodium.client.render.chunk.region.RenderRegion;
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
 import net.caffeinemc.mods.sodium.client.render.viewport.CameraTransform;
 import net.caffeinemc.mods.sodium.client.util.FogParameters;
@@ -146,6 +149,62 @@ public abstract class MixinDefaultChunkRenderer {
 				descriptor);
 
 		return this.vitrail$opened;
+	}
+
+	/**
+	 * The precision Sodium rounded the camera's fraction to before it moved it out of the region
+	 * offset: a region's width in blocks, so that adding and subtracting any offset inside one region
+	 * gives back the same position and neighbouring regions meet without a seam.
+	 */
+	@Unique
+	private static final float VITRAIL$FRACTION_PRECISION = RenderRegion.REGION_WIDTH * 16;
+
+	/**
+	 * Puts the camera's place inside its block back into the region offset, on the Sodium builds
+	 * that took it out.
+	 * <p>
+	 * Up to 0.9.3-beta.1 the offset Sodium pushes for each region is the region's origin minus the
+	 * camera, fraction included, and our chunk programs build the vertex from it alone
+	 * ({@code SodiumVertex}). From 0.9.3-beta.2 the offset is whole blocks, {@code
+	 * getCameraTranslation(int, int)}, and Sodium's own shader subtracts the fraction afterwards
+	 * from a {@code u_CameraOffset} in its {@code u_Globals}, a block our programs never declare.
+	 * Read as before, every vertex lands up to a block away from where the camera expects it, and
+	 * slides as the player walks, in the shadow map as much as in the world.
+	 * <p>
+	 * Only while one of our pipelines is bound, which the draw context's bind has just settled:
+	 * Sodium's shader reads its own offset and must keep it whole. The fraction is rounded as Sodium
+	 * rounded it while it was still pushed, so a frame is drawn from the same offsets either way.
+	 * {@code require = 0} because the call only exists on those builds: on the earlier ones there is
+	 * nothing to match, and nothing to put back.
+	 */
+	@ModifyExpressionValue(method = "render", require = 0, allow = 1,
+			at = @At(value = "INVOKE", ordinal = 0, target = "Lnet/caffeinemc/mods/sodium/client/"
+					+ "render/chunk/DefaultChunkRenderer;getCameraTranslation(II)F"))
+	private float vitrail$offsetX(float offset, @Local(argsOnly = true) CameraTransform camera) {
+		return TerrainDraw.boundOurs() ? offset - vitrail$fraction(camera.x, camera.intX) : offset;
+	}
+
+	@ModifyExpressionValue(method = "render", require = 0, allow = 1,
+			at = @At(value = "INVOKE", ordinal = 1, target = "Lnet/caffeinemc/mods/sodium/client/"
+					+ "render/chunk/DefaultChunkRenderer;getCameraTranslation(II)F"))
+	private float vitrail$offsetY(float offset, @Local(argsOnly = true) CameraTransform camera) {
+		return TerrainDraw.boundOurs() ? offset - vitrail$fraction(camera.y, camera.intY) : offset;
+	}
+
+	@ModifyExpressionValue(method = "render", require = 0, allow = 1,
+			at = @At(value = "INVOKE", ordinal = 2, target = "Lnet/caffeinemc/mods/sodium/client/"
+					+ "render/chunk/DefaultChunkRenderer;getCameraTranslation(II)F"))
+	private float vitrail$offsetZ(float offset, @Local(argsOnly = true) CameraTransform camera) {
+		return TerrainDraw.boundOurs() ? offset - vitrail$fraction(camera.z, camera.intZ) : offset;
+	}
+
+	/** The camera's fraction on one axis, at the precision the region offset carried it. */
+	@Unique
+	private static float vitrail$fraction(double position, int whole) {
+		float fraction = (float) (position - whole);
+		float modifier = Math.copySign(VITRAIL$FRACTION_PRECISION, fraction);
+
+		return (fraction + modifier) - modifier;
 	}
 
 	/**
