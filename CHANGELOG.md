@@ -11,6 +11,18 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## 0.13.0-beta.vultrum.5
+
+A build of 0.13.0-beta made for [Vultrum](https://github.com/DebZakari/Vultrum), under Vitrail's
+LGPL 3.0 licence. It retains the previous build's optimizations, mipmapped target fix, emissive
+entity overlay fix and Wakes Reforged fix. Report its bugs to Vultrum's issues, not to Vitrail's.
+
+### Fixed
+
+- With Sodium 0.9.3-beta.2 or newer, terrain and its shadows are drawn where they belong again.
+  They were out of place by up to a block and slid as you moved. Older Sodium builds look the
+  same as before.
+
 ## 0.13.0-beta.vultrum.4
 
 A build of 0.13.0-beta made for [Vultrum](https://github.com/DebZakari/Vultrum), under Vitrail's
