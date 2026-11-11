@@ -13,6 +13,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -57,6 +58,12 @@ import net.minecraft.world.phys.Vec3;
  * no caster submitted is never lent, which keeps out the block entities, the hand, the outlines and
  * whatever a mod draws in the level that is not an entity.
  * <p>
+ * <strong>Left to the walk unless it was lent.</strong> The walk leaves out a caster of the picture
+ * only when a draw it submitted was lent; one whose draws all went elsewhere (another pass, a renderer
+ * of a mod's own) is extracted again as before. So is an entity whose state the dispatcher did not
+ * make: a mod that hands the picture a stand-in, as an occlusion cull does for an entity it hides,
+ * would otherwise take the entity's shadow with it.
+ * <p>
  * <strong>Lent for the frame and no longer.</strong> The draws point into the frame's pooled vertex
  * buffer, which goes back to its pool after the screen is drawn, and the shadow stage stands before
  * that. Everything is cleared at the next extraction.
@@ -75,14 +82,17 @@ public final class ShadowReuse {
 	/** Whether the replay is on for this session, read once from the launch file. */
 	private static final boolean ENABLED = read();
 
-	/** Every entity the picture extracted this frame, while armed. The walk extracts none of them. */
+	/** The entities the picture extracted this frame, while armed, that the walk would not take. */
 	private static final Set<Entity> PICTURE = Collections.newSetFromMap(new IdentityHashMap<>());
 
 	/** The states of those the walk would have taken, which are the ones whose draws are lent. */
-	private static final Set<EntityRenderState> CASTERS = Collections.newSetFromMap(new IdentityHashMap<>());
+	private static final Map<EntityRenderState, Entity> CASTERS = new IdentityHashMap<>();
 
-	/** Every submission a caster made while the picture submitted it. */
-	private static final Set<SubmitNode> MARKED = Collections.newSetFromMap(new IdentityHashMap<>());
+	/** Every submission a caster made while the picture submitted it, with the caster. */
+	private static final Map<SubmitNode, Entity> MARKED = new IdentityHashMap<>();
+
+	/** The casters with at least one draw lent. */
+	private static final Set<Entity> DRAWN = Collections.newSetFromMap(new IdentityHashMap<>());
 
 	/** One of the picture's draws, kept for the light. */
 	private record Lent(PreparedRenderType prepared, StagedVertexBuffer.ExecuteInfo info) {
@@ -106,9 +116,12 @@ public final class ShadowReuse {
 	private static Frustum reach;
 	private static Vec3 at;
 
-	/** How deep the entity submissions are nested, and whether the outermost is a caster's. */
+	/** How deep the entity submissions are nested, and the caster the outermost is, if any. */
 	private static int depth;
-	private static boolean marking;
+	private static Entity marking;
+
+	/** The state the dispatcher last made while the picture extracted one entity. */
+	private static EntityRenderState dispatched;
 
 	private static boolean saidBroken;
 
@@ -121,28 +134,45 @@ public final class ShadowReuse {
 		PICTURE.clear();
 		CASTERS.clear();
 		MARKED.clear();
+		DRAWN.clear();
 		LENT.clear();
 		replaying = false;
 		depth = 0;
-		marking = false;
+		marking = null;
+		dispatched = null;
 
 		armed = ENABLED && askedFrame == frame - 1 && !held();
 		reach = armed ? ShadowGeometry.pictureReach(camera) : null;
 		at = camera;
 	}
 
+	/** Before the picture extracts an entity. */
+	public static void extracting() {
+		dispatched = null;
+	}
+
+	/** For each state the dispatcher makes; of nested ones the outermost comes last. */
+	public static void dispatched(EntityRenderState state) {
+		if (armed) {
+			dispatched = state;
+		}
+	}
+
 	/** For each entity the picture extracts, with the state it extracted. */
 	public static void extracted(Entity entity, EntityRenderState state, float partial) {
-		if (!armed) {
+		boolean made = state != null && state == dispatched;
+		dispatched = null;
+		if (!armed || !made) {
+			// Not the dispatcher's state: the walk extracts the entity itself, as before.
 			return;
 		}
 
 		try {
 			if (ShadowGeometry.pictureCaster(Minecraft.getInstance(), entity, reach, at, partial)) {
-				CASTERS.add(state);
+				CASTERS.put(state, entity);
+			} else {
+				PICTURE.add(entity);
 			}
-
-			PICTURE.add(entity);
 		} catch (RuntimeException e) {
 			// Left to the walk, which asks the same test and handles a failure of its own.
 			if (!saidBroken) {
@@ -154,37 +184,37 @@ public final class ShadowReuse {
 	}
 
 	/** At the head of each entity submission; hands back what {@link #leave} restores. */
-	public static boolean enter(EntityRenderState state) {
-		boolean was = marking;
+	public static Entity enter(EntityRenderState state) {
+		Entity was = marking;
 		if (depth++ == 0) {
 			// The outermost submission decides: what an entity submits inside its own is part of it.
-			marking = armed && CASTERS.contains(state);
+			marking = armed ? CASTERS.get(state) : null;
 		}
 
 		return was;
 	}
 
 	/** At the end of each entity submission, however it ended. */
-	public static void leave(boolean was) {
+	public static void leave(Entity was) {
 		depth--;
 		marking = was;
 	}
 
 	/** For every submission the game files into a phase. */
 	public static void submitted(SubmitNode submit) {
-		if (marking) {
-			MARKED.add(submit);
+		if (marking != null) {
+			MARKED.put(submit, marking);
 		}
 	}
 
 	/** Whether the game has to start a new group at {@code from} rather than extend the last one. */
 	public static boolean apart(List<SubmitNode> submits, int from) {
-		return MarkedRuns.apart(submits, from, MARKED);
+		return MarkedRuns.apart(submits, from, MARKED.keySet());
 	}
 
 	/** A run the game may reorder, split by the mark, or null where it holds one kind. */
 	public static <T> List<List<T>> runs(Collection<T> submits) {
-		return MarkedRuns.split(submits, MARKED);
+		return MarkedRuns.split(submits, MARKED.keySet());
 	}
 
 	/**
@@ -196,8 +226,8 @@ public final class ShadowReuse {
 	 */
 	public static void executing(Object renderer, PreparedRenderType prepared,
 			StagedVertexBuffer.ExecuteInfo info, List<?> submits) {
-		if (!armed || MARKED.isEmpty() || submits.isEmpty() || !MARKED.contains(submits.get(0))
-				|| !EntityDraw.pictureWindowOpen() || BlockEntityGeometry.drawing() || HandDraw.drawing()
+		if (!armed || MARKED.isEmpty() || submits.isEmpty() || !MARKED.containsKey(submits.get(0))
+				|| !EntityDraw.pictureWindowOpen() || BlockEntityGeometry.drawing()
 				// The ground oval and the outlines a caster submits are not part of its body, and
 				// the walk's own submission of the same caster drops them anyway.
 				|| renderer instanceof ShadowFeatureRenderer || renderer instanceof ShapeOutlineFeatureRenderer
@@ -206,6 +236,9 @@ public final class ShadowReuse {
 		}
 
 		LENT.add(new Lent(prepared, info));
+		for (Object submit : submits) {
+			DRAWN.add(MARKED.get(submit));
+		}
 	}
 
 	/** At the shadow stage, before the walk extracts: whether the pack asked for the entities. */
@@ -218,9 +251,12 @@ public final class ShadowReuse {
 		replaying = entities && armed && !LENT.isEmpty() && !held();
 	}
 
-	/** Whether the walk leaves this entity to the replay. */
+	/**
+	 * Whether the walk leaves this entity out: a caster of the picture's with a draw lent, or one of
+	 * the picture's the walk would not take.
+	 */
 	static boolean skip(Entity entity) {
-		return replaying && PICTURE.contains(entity);
+		return replaying && (DRAWN.contains(entity) || PICTURE.contains(entity));
 	}
 
 	static boolean replaying() {

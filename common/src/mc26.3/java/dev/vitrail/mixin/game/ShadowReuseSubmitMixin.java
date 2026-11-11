@@ -9,7 +9,11 @@ import net.minecraft.client.renderer.SubmitNodeCollector;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
 import net.minecraft.client.renderer.entity.state.EntityRenderState;
 import net.minecraft.client.renderer.state.level.CameraRenderState;
+import net.minecraft.world.entity.Entity;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Brackets each entity's submission, so that {@link ShadowReuse} can mark what a caster submits.
@@ -18,14 +22,23 @@ import org.spongepowered.asm.mixin.Mixin;
  * body, the flames and the ground oval of an entity together, whichever renderer the entity has, and
  * the outermost of nested calls decides for everything inside it. The end is in a {@code finally},
  * so a submission that throws and is caught further up leaves nothing marked that should not be.
+ * <p>
+ * Also tells {@link ShadowReuse} which states the dispatcher made, so a stand-in another mod returns
+ * from the picture's extraction is never taken for the entity.
  */
 @Mixin(EntityRenderDispatcher.class)
 public abstract class ShadowReuseSubmitMixin {
 
+	@Inject(method = "extractEntity", at = @At("RETURN"), require = 1)
+	private void vitrail$made(Entity entity, float partialTicks,
+			CallbackInfoReturnable<EntityRenderState> callback) {
+		ShadowReuse.dispatched(callback.getReturnValue());
+	}
+
 	@WrapMethod(method = "submit", require = 1)
 	private void vitrail$mark(EntityRenderState state, CameraRenderState camera, double x, double y,
 			double z, PoseStack poseStack, SubmitNodeCollector collector, Operation<Void> original) {
-		boolean was = ShadowReuse.enter(state);
+		Entity was = ShadowReuse.enter(state);
 		try {
 			original.call(state, camera, x, y, z, poseStack, collector);
 		} finally {

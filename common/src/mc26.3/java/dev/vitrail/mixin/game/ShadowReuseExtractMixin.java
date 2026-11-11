@@ -39,6 +39,7 @@ public abstract class ShadowReuseExtractMixin {
 					+ "Lnet/minecraft/client/renderer/entity/state/EntityRenderState;"))
 	private EntityRenderState vitrail$lend(LevelExtractor self, Entity entity, float partial,
 			Operation<EntityRenderState> original) {
+		ShadowReuse.extracting();
 		EntityRenderState state = original.call(self, entity, partial);
 		ShadowReuse.extracted(entity, state, partial);
 
