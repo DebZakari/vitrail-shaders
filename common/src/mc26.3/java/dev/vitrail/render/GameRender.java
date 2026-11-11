@@ -164,6 +164,22 @@ public final class GameRender {
 		return GraphicsApi.hasDepth(main) ? main.getDepthTextureView() : null;
 	}
 
+	/** Spike: runs replayed draws inside the same kind of pass {@link #renderAllFeatures} opens. */
+	public static void replayFeatures(Runnable draws, Supplier<String> label) {
+		RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
+		GpuTextureView colour = main.getColorTextureView();
+		GpuTextureView depth = main.getDepthTextureView();
+		CommandEncoder encoder = RenderSystem.getDevice().createCommandEncoder();
+
+		try (RenderPass pass = LevelPass.open(encoder.createRenderPass(label, colour,
+				Optional.empty(), depth, OptionalDouble.empty()), colour, depth,
+				() -> encoder.createRenderPass(label, colour, Optional.empty(), depth,
+						OptionalDouble.empty()))) {
+			RenderSystem.bindDefaultUniforms(pass);
+			draws.run();
+		}
+	}
+
 	/**
 	 * Draws everything a storage of the engine's own holds, on a dispatcher of the engine's own.
 	 * <p>

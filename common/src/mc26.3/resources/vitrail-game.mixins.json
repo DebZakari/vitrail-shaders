@@ -18,6 +18,7 @@
 		"RenderSystemAccessor",
 		"RenderSystemMixin",
 		"SkyRendererMixin",
+		"ShadowReuseProbeMixin",
 		"SPIRVModuleMixin",
 		"VulkanRenderPipelineAccessor",
 		"WakesShaderHooksMixin"
