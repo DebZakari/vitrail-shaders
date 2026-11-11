@@ -164,7 +164,13 @@ public final class GameRender {
 		return GraphicsApi.hasDepth(main) ? main.getDepthTextureView() : null;
 	}
 
-	/** Spike: runs replayed draws inside the same kind of pass {@link #renderAllFeatures} opens. */
+	/**
+	 * Runs draws recorded earlier in the frame inside the same kind of pass {@link #renderAllFeatures}
+	 * opens, for the light's map to draw the picture's entity draws again ({@code ShadowReuse}).
+	 * <p>
+	 * Nothing is prepared here: the draws point into what the picture's own frame prepared and
+	 * uploaded, so whatever the draws need from outside a pass the caller asks for before this.
+	 */
 	public static void replayFeatures(Runnable draws, Supplier<String> label) {
 		RenderTarget main = Minecraft.getInstance().gameRenderer.mainRenderTarget();
 		GpuTextureView colour = main.getColorTextureView();

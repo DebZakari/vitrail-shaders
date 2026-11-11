@@ -4,17 +4,15 @@ import dev.vitrail.render.BlockEntityGeometry;
 import dev.vitrail.render.BlockEntityOrigin;
 import dev.vitrail.render.EntityDraw;
 import dev.vitrail.render.LevelPass;
-import dev.vitrail.render.ShadowGeometry;
+import dev.vitrail.render.ShadowReuse;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.renderpearl.api.commands.RenderPass;
 import net.minecraft.client.renderer.StagedVertexBuffer;
 import net.minecraft.client.renderer.feature.FeatureFrameContext;
-import net.minecraft.client.renderer.feature.GizmoFeatureRenderer;
 import net.minecraft.client.renderer.feature.RenderTypeFeatureRenderer;
-import net.minecraft.client.renderer.feature.ShadowFeatureRenderer;
-import net.minecraft.client.renderer.feature.ShapeOutlineFeatureRenderer;
 import net.minecraft.client.renderer.oit.OitStage;
 import net.minecraft.client.renderer.rendertype.PreparedRenderType;
 import org.spongepowered.asm.mixin.Mixin;
@@ -98,14 +96,10 @@ public abstract class RenderTypeFeatureRendererMixin {
 							+ "Lcom/mojang/renderpearl/api/commands/RenderPass;"
 							+ ")V"))
 	private void vitrail$draw(PreparedRenderType renderType, StagedVertexBuffer.ExecuteInfo info,
-			RenderPass pass, Operation<Void> original) {
-		// Spike: keep the picture's entity draws for the light's walk to replay this frame.
-		Object self = this;
-		if (EntityDraw.pictureWindowOpen() && !BlockEntityGeometry.drawing()
-				&& !(self instanceof ShapeOutlineFeatureRenderer) && !(self instanceof GizmoFeatureRenderer)
-				&& !(self instanceof ShadowFeatureRenderer)) {
-			ShadowGeometry.capture(renderType, info);
-		}
+			RenderPass pass, Operation<Void> original, @Local(argsOnly = true) List<?> submits) {
+		// Before the door, which may serve it: the draw is the same either way, and the light's walk
+		// draws the picture's casters again from what is kept here.
+		ShadowReuse.executing(this, renderType, info, submits);
 
 		if (!EntityDraw.draw(renderType, info)) {
 			original.call(renderType, info, pass);

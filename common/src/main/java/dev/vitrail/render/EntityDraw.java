@@ -1845,7 +1845,10 @@ public final class EntityDraw extends FamilyDraw {
 		}
 	}
 
-	/** Spike: whether one of the picture's two feature windows is open, and the light's is not. */
+	/**
+	 * Whether one of the picture's two feature windows is open and the light's is not, which is when
+	 * a draw executed is one of the picture's entity draws ({@code ShadowReuse} keeps them).
+	 */
 	public static boolean pictureWindowOpen() {
 		return wanted && !shadowFeatures && (opaqueFeatures || translucentFeatures);
 	}

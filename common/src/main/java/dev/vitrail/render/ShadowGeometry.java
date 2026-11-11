@@ -100,118 +100,6 @@ public final class ShadowGeometry {
 	private static boolean blockEntitiesAsked;
 	private static boolean emittersOnly;
 
-	/** Spike: the entities the main pass extracted this frame (filled by a 26.3 mixin). */
-	public static final java.util.Set<Entity> MAIN_PASS =
-			java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
-
-	/** Spike: one entity draw of the picture, kept for the light's walk to replay this frame. */
-	public record Captured(net.minecraft.client.renderer.rendertype.PreparedRenderType prepared,
-			net.minecraft.client.renderer.StagedVertexBuffer.ExecuteInfo info) {
-	}
-
-	private static final java.util.List<Captured> CAPTURED = new java.util.ArrayList<>();
-	private static boolean capturedThisFrame;
-	private static boolean replayAllowed;
-
-	private static long spikeSince;
-	private static int spikeFrames;
-	private static long spikeExtracted;
-	private static long spikeSkipped;
-	private static long spikeReplayed;
-	private static int frameSkipped;
-
-	/** Spike: called from the picture's feature windows for each entity draw, before the door. */
-	public static void capture(net.minecraft.client.renderer.rendertype.PreparedRenderType prepared,
-			net.minecraft.client.renderer.StagedVertexBuffer.ExecuteInfo info) {
-		CAPTURED.add(new Captured(prepared, info));
-		capturedThisFrame = true;
-	}
-
-	/** Spike: Vultrum's visual check switches the replay off with its culls (absent: never off). */
-	private static java.lang.invoke.MethodHandle suspended;
-	private static boolean suspendedLooked;
-
-	private static boolean suspended() {
-		if (!suspendedLooked) {
-			suspendedLooked = true;
-			try {
-				suspended = java.lang.invoke.MethodHandles.publicLookup().findStatic(
-						Class.forName("dev.vultrum.cull.ShadowPass"), "suspended",
-						java.lang.invoke.MethodType.methodType(boolean.class));
-			} catch (ReflectiveOperationException | LinkageError e) {
-				suspended = null;
-			}
-			Vitrail.logger().info("shadow-reuse spike: follows Vultrum's visual check: {}", suspended != null);
-		}
-
-		try {
-			return suspended != null && (boolean) suspended.invokeExact();
-		} catch (Throwable e) {
-			return false;
-		}
-	}
-
-	/** Spike: called at the head of the frame's entity extraction. */
-	public static void frameStart() {
-		MAIN_PASS.clear();
-		CAPTURED.clear();
-		capturedThisFrame = false;
-	}
-
-	private static void spikeLog(int replayed) {
-		spikeFrames++;
-		spikeExtracted += gathered;
-		spikeSkipped += frameSkipped;
-		spikeReplayed += replayed;
-		long now = System.nanoTime();
-		if (spikeSince == 0) {
-			spikeSince = now;
-		} else if (now - spikeSince >= 1_000_000_000L) {
-			double f = spikeFrames;
-			Vitrail.logger().info(String.format(java.util.Locale.ROOT,
-					"shadow-reuse spike: frames %d, per frame extracted %.2f, skipped %.2f, replayed draws %.2f",
-					spikeFrames, spikeExtracted / f, spikeSkipped / f, spikeReplayed / f));
-			spikeSince = now;
-			spikeFrames = 0;
-			spikeExtracted = 0;
-			spikeSkipped = 0;
-			spikeReplayed = 0;
-		}
-	}
-
-	/** Spike: draws the picture's kept entity draws into the map, through the same door. */
-	private static int replay() {
-		// Index storage first and outside any pass: growing it is an upload.
-		for (Captured kept : CAPTURED) {
-			if (kept.info().customIndexBuffer() == null) {
-				com.mojang.blaze3d.systems.RenderSystem.getSequentialBuffer(kept.info().topology())
-						.getBuffer(kept.info().indexCount());
-			}
-		}
-
-		GameRender.replayFeatures(() -> {
-			try {
-				for (Captured kept : CAPTURED) {
-					net.minecraft.client.renderer.StagedVertexBuffer.ExecuteInfo info = kept.info();
-					if (info.customIndexBuffer() == null) {
-						// The type the shared indices have now, which a growth since the picture can change.
-						info = new net.minecraft.client.renderer.StagedVertexBuffer.ExecuteInfo(
-								info.vertexBuffer(), null,
-								com.mojang.blaze3d.systems.RenderSystem.getSequentialBuffer(info.topology()).type(),
-								info.baseVertex(), 0, info.indexCount(), info.topology());
-					}
-
-					BlockEntityGeometry.drawing(false);
-					EntityDraw.draw(kept.prepared(), info);
-				}
-			} finally {
-				EntityDraw.endGroup();
-			}
-		}, () -> "Vitrail shadow replay");
-
-		return CAPTURED.size();
-	}
-
 	private ShadowGeometry() {
 	}
 
@@ -249,8 +137,6 @@ public final class ShadowGeometry {
 		gatheredBlocks = 0;
 		blockEntitiesAsked = false;
 		emittersOnly = false;
-		replayAllowed = false;
-		frameSkipped = 0;
 
 		// The entity switch and not one of its own, which is the convention: what enters the map here
 		// is the same geometry that door serves, read from the same tables, and a family does not take
@@ -318,7 +204,9 @@ public final class ShadowGeometry {
 			return;
 		}
 
-		replayAllowed = casters.entities() && !suspended();
+		// Said before the walk below and not after it: whether the picture's draws are lent to the map
+		// this frame decides which of the entities that walk extracts again.
+		ShadowReuse.gathered(casters.entities());
 		gathered = extractEntities(minecraft, view, frustum, casters);
 
 		// The block entities are not taken here, and it is not an order this walk chose: the list
@@ -409,8 +297,10 @@ public final class ShadowGeometry {
 			if (buffers != null) {
 				buffers.endFrame();
 			}
-			CAPTURED.clear();
-			capturedThisFrame = false;
+
+			// The picture's draws are lent for this stage and no longer: the buffer they point into
+			// goes back to its pool at the end of the frame.
+			ShadowReuse.walked();
 		}
 	}
 
@@ -432,7 +322,7 @@ public final class ShadowGeometry {
 
 	private static void walk(Vec3 camera) {
 		Minecraft minecraft = Minecraft.getInstance();
-		boolean replaying = replayAllowed && capturedThisFrame && !CAPTURED.isEmpty();
+		boolean replaying = ShadowReuse.replaying();
 		boolean submitting = gathered != 0 || gatheredBlocks != 0;
 		if (minecraft == null || (!submitting && !replaying) || !ensure(minecraft)) {
 			return;
@@ -441,7 +331,7 @@ public final class ShadowGeometry {
 		if (submitting) {
 			submit(minecraft, camera);
 		}
-		say(gathered, gatheredBlocks);
+		say(gathered, gatheredBlocks, replaying ? ShadowReuse.lent() : 0);
 
 		EntityDraw.shadowFeatures(true);
 		try {
@@ -450,7 +340,10 @@ public final class ShadowGeometry {
 			if (submitting) {
 				GameRender.renderAllFeatures(dispatcher, storage, () -> "Vitrail shadow casters");
 			}
-			spikeLog(replaying ? replay() : 0);
+
+			if (replaying) {
+				ShadowReuse.replay();
+			}
 		} finally {
 			// Lowered whatever happened, and this is the one flag of the three that nothing else
 			// would lower: the other two are closed by the game's own events, and there is no event
@@ -529,11 +422,10 @@ public final class ShadowGeometry {
 		Vec3 at = view.position();
 
 		if (casters.entities()) {
-			boolean reuse = capturedThisFrame && replayAllowed;
 			for (Entity entity : minecraft.level.entitiesForRendering()) {
-				// Spike: what the picture drew this frame is replayed instead of extracted again.
-				if (reuse && MAIN_PASS.contains(entity)) {
-					frameSkipped++;
+				// What the picture extracted this frame is posed already, and its draws are lent to
+				// the map instead (ShadowReuse): extracted twice, it would be drawn twice.
+				if (ShadowReuse.skip(entity)) {
 					continue;
 				}
 
@@ -653,6 +545,34 @@ public final class ShadowGeometry {
 				|| GameRender.sectionShown(minecraft.levelRenderer, block);
 	}
 
+	/**
+	 * The pack's reach alone, about where the picture is drawn from: the frustum
+	 * {@link #pictureCaster} measures the picture's own entities against.
+	 * <p>
+	 * Without the light's planes, because the picture is extracted before the light's matrix of the
+	 * frame exists. What that lets through is a caster outside the light's volume, which lands
+	 * outside the map: a draw and never a pixel, the same bargain {@link #visible} describes for the
+	 * sweep.
+	 */
+	static Frustum pictureReach(Vec3 at) {
+		Frustum frustum = new Reached(null, TerrainDraw.entityShadowDistance());
+		frustum.prepare(at.x, at.y, at.z);
+
+		return frustum;
+	}
+
+	/**
+	 * Whether an entity the picture extracts is one this walk would have taken, asked with the same
+	 * test the walk asks and so with everything that test is hooked by.
+	 *
+	 * @param reach what {@link #pictureReach} built for this frame
+	 */
+	static boolean pictureCaster(Minecraft minecraft, Entity entity, Frustum reach, Vec3 at,
+			float partial) {
+		return visible(minecraft, minecraft.levelRenderer.entityRenderDispatcher(), entity, reach, at,
+				partial);
+	}
+
 	/** Poses everything extracted about the camera and hands it to our own storage. */
 	private static void submit(Minecraft minecraft, Vec3 camera) {
 		PoseStack pose = new PoseStack();
@@ -684,12 +604,12 @@ public final class ShadowGeometry {
 	 * the line until a frame finds something is worse: a world that never puts a chest in the light's
 	 * box would then lose the entity count too.
 	 */
-	private static void say(int entities, int blockEntities) {
+	private static void say(int entities, int blockEntities, int lent) {
 		if (counted != BlockStateIds.generation()) {
 			counted = BlockStateIds.generation();
 			Vitrail.logger().info("On this frame the light's walk submitted {} entities and {} block "
-					+ "entities into the shadow map, on block table {}", entities, blockEntities,
-					counted);
+					+ "entities into the shadow map and replayed {} of the picture's entity draws "
+					+ "there, on block table {}", entities, blockEntities, lent, counted);
 		}
 	}
 
@@ -736,14 +656,19 @@ public final class ShadowGeometry {
 		/** Half the side of the cube, in blocks, or negative where nothing bounds the casters. */
 		private final float reach;
 
+		/** Whether the light's planes are asked after the cube, which only the walk's own does. */
+		private final boolean planes;
+
+		/** @param light the light's view projection, or null for the cube alone */
 		Reached(Matrix4f light, float reach) {
-			super(new Matrix4f(), light);
+			super(new Matrix4f(), light == null ? new Matrix4f() : light);
 			this.reach = reach;
+			this.planes = light != null;
 		}
 
 		@Override
 		public boolean isVisible(AABB box) {
-			return !culled(box) && super.isVisible(box);
+			return !culled(box) && (!this.planes || super.isVisible(box));
 		}
 
 		/**
