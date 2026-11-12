@@ -11,6 +11,23 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## 0.13.0-beta.vultrum.6
+
+A build of 0.13.0-beta made for [Vultrum](https://github.com/DebZakari/Vultrum), under Vitrail's
+LGPL 3.0 licence. It retains the previous build's optimizations and fixes. Report its bugs to
+Vultrum's issues, not to Vitrail's.
+
+### Changed
+
+- **Mobs and displays in view cost less in the shadow map on Minecraft 26.3.** Under a pack that
+  casts entity shadows, every mob in view and within the pack's entity shadow distance was posed
+  and built a second time for the shadow map. The shadow map now draws the meshes the picture
+  already built for them in the same frame. In a field of mobs with Entity Model Features and
+  Fresh Animations under Complementary the frame rate rose by 26%, and by 20% in a field of item
+  and block displays. Scenes with few entities run as before. Entities out of view, and those
+  whose models another mod draws in a pass of its own, still get their shadows the old way. Write
+  `off` in `vitrail/shadow-replay` in the game folder to turn it off at the next launch.
+
 ## 0.13.0-beta.vultrum.5
 
 A build of 0.13.0-beta made for [Vultrum](https://github.com/DebZakari/Vultrum), under Vitrail's
