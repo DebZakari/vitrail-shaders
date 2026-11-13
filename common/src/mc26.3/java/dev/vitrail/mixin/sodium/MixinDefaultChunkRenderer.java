@@ -2,8 +2,10 @@ package dev.vitrail.mixin.sodium;
 
 import dev.vitrail.pack.program.TerrainPass;
 import dev.vitrail.render.GeometryHold;
+import dev.vitrail.render.LegacyTerrainFilter;
 import dev.vitrail.render.LevelPass;
 import dev.vitrail.render.TerrainDraw;
+import dev.vitrail.render.TerrainSampler;
 import dev.vitrail.render.timing.RingTimings;
 import dev.vitrail.sodium.SodiumApi;
 import dev.vitrail.sodium.SodiumPasses;
@@ -99,6 +101,33 @@ public abstract class MixinDefaultChunkRenderer {
 	@Inject(method = "rotate", at = @At("RETURN"), require = 1)
 	private void vitrail$rotateEnd(CallbackInfo ci) {
 		RingTimings.endRotate();
+	}
+
+	/**
+	 * Settles which sampler a pack's terrain reads the block atlas through, at the one point that is
+	 * handed the game's on every Sodium this is built for: {@code begin} had it as well up to
+	 * 0.9.3-beta.4, and {@code compileProgram} never has. {@code render} calls {@code begin}, which
+	 * calls {@code compileProgram}, so this always lands first.
+	 * <p>
+	 * <strong>What the pack binds is ours and not the game's, and that is a correction rather than a
+	 * preference.</strong> The game filters the atlas LINEAR and Iris binds NEAREST for every terrain
+	 * draw, so a pack, which is written against Iris, expects NEAREST. What that filter decides on
+	 * cutout foliage is the silhouette rather than the colour, the fragment being discarded on the
+	 * atlas's alpha, and {@link TerrainSampler} carries the whole of it with the references on both
+	 * sides. {@link LegacyTerrainFilter} hands back whatever this road was given, for a comparison,
+	 * which is the game's LINEAR under the camera and NEAREST in the shadow map: what the switch
+	 * moves is the gbuffer half alone. The choice is made where the pack is known to be drawing, so
+	 * that a pass with no pack behind it neither asks nor announces anything.
+	 * <p>
+	 * Every pass comes through here, the shadow map's included: the light's draw hands a sampler of
+	 * its own down the same road, NEAREST rather than the game's
+	 * ({@code sodium/ShadowTerrain.java:323}), and the pack's shadow programs bind what is settled
+	 * here.
+	 */
+	@Inject(method = "render", at = @At("HEAD"), require = 1)
+	private void vitrail$sampler(CallbackInfo callback,
+			@Local(argsOnly = true) GpuSampler terrainSampler) {
+		TerrainDraw.sampler(terrainSampler);
 	}
 
 	/**

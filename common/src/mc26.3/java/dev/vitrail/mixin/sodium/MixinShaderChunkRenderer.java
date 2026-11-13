@@ -2,24 +2,20 @@ package dev.vitrail.mixin.sodium;
 
 import dev.vitrail.sodium.SodiumPasses;
 import dev.vitrail.pack.program.TerrainPass;
-import dev.vitrail.render.LegacyTerrainFilter;
 import dev.vitrail.render.TerrainDraw;
-import dev.vitrail.render.TerrainSampler;
 
+import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.renderpearl.api.pipeline.RenderPipeline;
-import com.mojang.renderpearl.api.textures.GpuSampler;
 import com.mojang.renderpearl.api.vertex.VertexFormat;
 import net.caffeinemc.mods.sodium.client.gpu.device.backend.DrawBackend;
 import net.caffeinemc.mods.sodium.client.render.chunk.ShaderChunkRenderer;
 import net.caffeinemc.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
-import net.caffeinemc.mods.sodium.client.util.FogParameters;
 import net.minecraft.client.renderer.oit.OitStage;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import org.jspecify.annotations.Nullable;
@@ -59,6 +55,12 @@ import java.util.Map;
  * one after this, so what cannot happen inside a pass goes through the encoder, which steps the
  * level's pass aside for a clear; creating an image or a buffer records nothing into a pass on this
  * game, the backend recording that into a command buffer of its own.
+ * <p>
+ * From Sodium 0.9.3-beta.5 {@code compileProgram} takes a third argument, the settings Sodium's
+ * programs are compiled from, of a type the earlier builds do not have, and {@code begin} takes the
+ * pass and the stage alone. So the handler reads the pass and the stage by type, which holds on
+ * either side, and the game's sampler is taken from {@code render} instead
+ * ({@link MixinDefaultChunkRenderer}).
  */
 @Mixin(value = ShaderChunkRenderer.class, remap = false)
 public abstract class MixinShaderChunkRenderer {
@@ -66,35 +68,10 @@ public abstract class MixinShaderChunkRenderer {
 	@Shadow
 	protected VertexFormat vertexFormat;
 
-	/**
-	 * Settles which sampler a pack's terrain reads the block atlas through, at the one point that is
-	 * handed the game's: {@code begin} has it and {@code compileProgram} does not. {@code begin}
-	 * calls {@code compileProgram}, so this always lands first.
-	 * <p>
-	 * <strong>What the pack binds is ours and not the game's, and that is a correction rather than a
-	 * preference.</strong> The game filters the atlas LINEAR and Iris binds NEAREST for every terrain
-	 * draw, so a pack, which is written against Iris, expects NEAREST. What that filter decides on
-	 * cutout foliage is the silhouette rather than the colour, the fragment being discarded on the
-	 * atlas's alpha, and {@link TerrainSampler} carries the whole of it with the references on both
-	 * sides. {@link LegacyTerrainFilter} hands back whatever this road was given, for a comparison,
-	 * which is the game's LINEAR under the camera and NEAREST in the shadow map: what the switch
-	 * moves is the gbuffer half alone. The choice is made where the pack is known to be drawing, so
-	 * that a pass with no pack behind it neither asks nor announces anything.
-	 * <p>
-	 * Every pass comes through here, the shadow map's included: the light's draw hands a sampler of
-	 * its own down the same road, NEAREST rather than the game's
-	 * ({@code sodium/ShadowTerrain.java:323}), and the pack's shadow programs bind what is settled
-	 * here.
-	 */
-	@Inject(method = "begin", at = @At("HEAD"))
-	private void vitrail$sampler(TerrainRenderPass pass, FogParameters parameters,
-			GpuSampler terrainSampler, @Nullable OitStage stage, CallbackInfo callback) {
-		TerrainDraw.sampler(terrainSampler);
-	}
-
 	@Inject(method = "compileProgram", at = @At("HEAD"), cancellable = true)
-	private void vitrail$terrain(TerrainRenderPass pass, @Nullable OitStage stage,
-			CallbackInfoReturnable<RenderPipeline> callback) {
+	private void vitrail$terrain(CallbackInfoReturnable<RenderPipeline> callback,
+			@Local(argsOnly = true) TerrainRenderPass pass,
+			@Local(argsOnly = true) @Nullable OitStage stage) {
 		// The region offset arrives through push constants, which only the Vulkan backend pushes at
 		// all: under OpenGL Sodium sets it as an ordinary uniform and our shader would read nothing.
 		// An order independent stage asks for one of Sodium's own sets, which no pack answers for.
@@ -120,9 +97,11 @@ public abstract class MixinShaderChunkRenderer {
 	 * <strong>The memo is static and keyed by the render pass alone.</strong> The three passes are
 	 * immortal instances of {@code DefaultTerrainRenderPasses}, the map is a static field, and what
 	 * it holds declares the vertex format of whichever renderer built it,
-	 * {@code withVertexBinding(0, this.vertexFormat)}. Nothing ever empties it, and the renderer's own
-	 * {@code delete} is not an oversight either: what it frees is the index buffer and the draw context
-	 * it owns, and the half it inherits is a plain return.
+	 * {@code withVertexBinding(0, this.vertexFormat)}. Up to 0.9.3-beta.4 nothing ever empties it;
+	 * from beta.5 Sodium empties it when the settings its programs are compiled from change, which is
+	 * its spherical fog switch and never the format. The renderer's own {@code delete} is not an
+	 * oversight either: what it frees is the index buffer and the draw context it owns, and the half
+	 * it inherits is a plain return.
 	 * <p>
 	 * Everything else that holds a stride is rebuilt when the format moves - the section manager, the
 	 * chunk renderer it constructs from the format in force, the mesh of every section - so this memo
