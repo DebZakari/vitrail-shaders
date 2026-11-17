@@ -11,6 +11,15 @@ publishing a jar named after one thing and built from another.
 Everything is a pre-release while the version stays under `1.0.0`. Nothing here is a promise about
 what the next one holds.
 
+## Unreleased
+
+### Fixed
+
+- **Transparent glass pixels no longer cast solid shadows.** The translucent shadow pass now
+  uses the same alpha cutoff as Iris. This fixes clear glass casting a solid shadow with
+  Complementary's Very Low real-time shadows; a pack's own alpha-test directive still takes
+  precedence.
+
 ## 0.13.0-beta.vultrum.7
 
 **Sodium:** on Minecraft 26.3 this build takes any Sodium 0.9.3, and Sodium 0.9.3-beta.5 needs

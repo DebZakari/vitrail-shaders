@@ -54,12 +54,12 @@ public enum TerrainPass {
 	SHADOW_CUTOUT("shadow_cutout", AlphaTest.CUTOUT, false, true),
 
 	/**
-	 * Water, ice and stained glass seen from the light, and it is not blended: what a shadow map
+	 * Water, ice and glass seen from the light, and it is not blended: what a shadow map
 	 * wants from a translucent surface is the depth it stands at and the colour it tints the light
-	 * with, both written outright. Iris gives this half no alpha test either, so a pack that means
-	 * to let something through says so with a discard of its own.
+	 * with, both written outright. Iris alpha-tests this half at a tenth, preserving transparent
+	 * texels in clear glass and other translucent casters. A pack can override the threshold.
 	 */
-	SHADOW_TRANSLUCENT("shadow_water", AlphaTest.OFF, false, true);
+	SHADOW_TRANSLUCENT("shadow_water", AlphaTest.ONE_TENTH, false, true);
 
 	private final String program;
 	// A record over an enum and a float, so it is immutable in fact; the analyser wants an
